@@ -1,0 +1,165 @@
+# IAfluence Booking
+
+Réservation de la **première session de 1 h** après l’achat d’une prestation « Conseil IA » sur Stripe.
+
+Paiement Stripe → vérification → lien de réservation sécurisé → créneaux libres agrégés depuis plusieurs Google Calendars (free/busy uniquement) → création de l’événement Google Calendar + Meet + invitation → emails client et admin → suivi des heures achetées / réservées / restantes.
+
+```
+backend/    FastAPI · SQLAlchemy · Alembic · PostgreSQL
+frontend/   React · Vite · TypeScript · Tailwind
+deploy/     Docker Compose · Caddy (TLS auto) · .env.example
+```
+
+## Fonctionnement
+
+| Étape | Détail |
+|---|---|
+| Paiement | 4 Payment Links Stripe. Chaque produit porte la métadonnée `hours` (1, 2, 3, 5). |
+| Redirection | Après paiement, Stripe renvoie vers `/reservation?session_id={CHECKOUT_SESSION_ID}`. Le backend vérifie la session auprès de Stripe, crée l’achat et un **token aléatoire de 256 bits**, puis le navigateur est redirigé vers `/reservation/{token}`. Le lien est aussi envoyé par email. |
+| Webhook | `POST /webhooks/stripe` (`checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded`). Traitement idempotent : webhook et redirection peuvent arriver dans n’importe quel ordre. Un remboursement total révoque le lien et alerte l’admin. |
+| Disponibilités | `freebusy.query` sur tous les calendriers activés + le calendrier des rendez-vous. Aucun titre, participant, lieu ou lien n’est jamais lu ni exposé : l’API ne renvoie que `{start, end}`. Si un calendrier est en erreur, rien n’est proposé (fail closed). |
+| Règles | Horaires hebdomadaires (plusieurs plages par jour possibles), durée 60 min, tampons 15 min avant/après, préavis 24 h, horizon 30 jours, fuseau `Europe/Paris` (changements d’heure gérés). |
+| Réservation | Verrou transactionnel PostgreSQL + nouvelle requête free/busy (sans cache) juste avant la création de l’événement. En base, un index unique (une session par achat) et une contrainte d’exclusion (aucun chevauchement) empêchent toute double réservation. |
+| Google Calendar | Événement « Conseil IA - Nom » dans le calendrier dédié, avec le client en invité (`sendUpdates=all` : Google envoie l’invitation à n’importe quelle adresse) et un lien Meet optionnel. |
+| Emails | Envoyés via l’API Gmail : lien de réservation, confirmation client, notification « NOUVELLE RÉSERVATION », alerte remboursement. |
+| Admin | `/admin` (mot de passe unique) : indicateurs du mois, heures vendues/réalisées/restantes, prochains rendez-vous, liste des clients. |
+
+## Démarrage local (démo sans Google ni Stripe)
+
+Prérequis : Python 3.12+, [uv](https://docs.astral.sh/uv/), Node 22, PostgreSQL 16 (ou Docker).
+
+```bash
+docker run -d --name iafluence-db -e POSTGRES_PASSWORD=dev -p 5432:5432 postgres:16-alpine
+```
+
+Créer `backend/.env` :
+
+```dotenv
+DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/postgres
+PUBLIC_BASE_URL=http://localhost:5173
+FAKE_INTEGRATIONS=true
+ADMIN_PASSWORD_HASH='...'   # voir « Mot de passe admin » ci-dessous
+SESSION_SECRET=dev
+COOKIE_SECURE=false
+```
+
+```bash
+cd backend
+uv sync
+uv run alembic upgrade head
+uv run python -m scripts.seed_settings --admin-email vous@example.com --booking-calendar demo
+uv run uvicorn app.main:app --port 8000
+```
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Avec `FAKE_INTEGRATIONS=true`, toute session `cs_demo_<heures>h_<nom>` est un paiement valide, par exemple
+http://localhost:5173/reservation?session_id=cs_demo_5h_jean. Les calendriers contiennent quelques créneaux occupés fictifs et les emails s’affichent dans les logs.
+
+> Sur un poste où un antivirus ou un proxy intercepte le TLS, ajoutez `--system-certs` aux commandes `uv` si l’installation échoue avec `invalid peer certificate`.
+
+## Tests
+
+```bash
+cd backend
+TEST_DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/iafluence_test uv run pytest
+```
+
+Sans `TEST_DATABASE_URL`, seuls les tests unitaires (moteur de créneaux, passerelle Google) s’exécutent. Les tests d’intégration utilisent un vrai PostgreSQL (contrainte d’exclusion, verrous) et des faux Google et Stripe. Ils couvrent notamment les réservations concurrentes, l’idempotence des webhooks, les remboursements et l’absence de fuite d’identifiants de calendrier.
+
+## Mise en production
+
+### 1. Google (compte Gmail personnel)
+
+1. Dans [Google Cloud Console](https://console.cloud.google.com/) : créer un projet, puis activer **Google Calendar API** et **Gmail API**.
+2. **Écran de consentement OAuth** : type *Externe*. Ajouter votre adresse, puis **passer l’application en production** (« Publish app »).
+   ⚠️ En mode *Testing*, le refresh token expire au bout de 7 jours. L’application n’a pas besoin d’être vérifiée pour votre propre compte : vous verrez un avertissement une seule fois, au moment du consentement.
+3. **Identifiants** → *ID client OAuth* → type **Application de bureau** → télécharger le JSON.
+4. Sur votre poste :
+   ```bash
+   cd backend
+   uv run python -m scripts.google_oauth_init chemin/vers/client_secret.json
+   ```
+   Copier les trois valeurs affichées dans `deploy/.env`.
+5. Créer dans Google Calendar un agenda **« IAfluence - Conseil clients »**. Son ID se trouve dans *Paramètres de l’agenda → Intégrer l’agenda*.
+6. Les agendas d’autres comptes (Formation, ESC Clermont, Personnel…) doivent être **partagés avec votre compte Gmail**, au minimum avec le droit « Voir uniquement les informations de disponibilité ». C’est suffisant pour free/busy et cohérent avec l’exigence de confidentialité.
+   Les agendas Outlook/Exchange ne sont pas pris en charge dans ce MVP.
+
+### 2. Stripe
+
+1. Pour chacun des 4 produits (Conseil IA 1 h, 2 h, 3 h, 5 h), ajouter la **métadonnée produit** `hours` = `1` / `2` / `3` / `5`.
+2. Pour chaque Payment Link : *Après le paiement* → *Rediriger vers votre site* →
+   `https://booking.iafluence.fr/reservation?session_id={CHECKOUT_SESSION_ID}`
+   Le nom et l’email sont collectés par Stripe (`customer_details`).
+3. *Developers → Webhooks* : ajouter l’endpoint `https://booking.iafluence.fr/webhooks/stripe` avec les événements `checkout.session.completed`, `checkout.session.async_payment_succeeded` et `charge.refunded`. Copier le *signing secret*.
+4. Créer une **clé restreinte** avec *Checkout Sessions : lecture* et *Products : lecture*.
+
+Tester d’abord en mode test : carte `4242 4242 4242 4242`, puis `stripe listen --forward-to localhost:8000/webhooks/stripe` en local.
+
+### 3. Serveur (VPS)
+
+DNS : un enregistrement `A booking.iafluence.fr` qui pointe vers l’IP du VPS. Ports 80 et 443 ouverts.
+
+```bash
+git clone … && cd iafluence-booking/deploy
+cp .env.example .env    # puis remplir
+docker compose up -d --build
+```
+
+Initialisation, une seule fois :
+
+```bash
+docker compose exec api python -m scripts.seed_settings \
+  --admin-email contact@iafluence.fr \
+  --booking-calendar "xxxx@group.calendar.google.com"
+docker compose exec api python -m scripts.list_calendars                       # lister les agendas visibles
+docker compose exec api python -m scripts.list_calendars --add "ID" "Formation"  # répéter pour chaque agenda
+```
+
+Le calendrier des rendez-vous est toujours pris en compte dans les disponibilités. Inutile de l’ajouter comme source.
+
+**Mot de passe admin :**
+
+```bash
+cd backend && uv run python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('votre-mot-de-passe'))"
+```
+
+Placer la valeur entre apostrophes dans `ADMIN_PASSWORD_HASH='…'`.
+
+**Sauvegardes :**
+
+```bash
+docker compose exec db pg_dump -U iafluence iafluence | gzip > backup-$(date +%F).sql.gz
+```
+
+À planifier en cron quotidien.
+
+### Réglages
+
+Les réglages métier sont stockés en base (tables `settings` et `availability_rules`). Pour modifier les horaires, par exemple ajouter une pause déjeuner le mardi :
+
+```sql
+DELETE FROM availability_rules WHERE weekday = 1;
+INSERT INTO availability_rules (weekday, start_time, end_time) VALUES (1, '09:00', '12:00'), (1, '14:00', '18:00');
+-- weekday : 0 = lundi … 6 = dimanche
+UPDATE settings SET buffer_before_min = 15, buffer_after_min = 15, minimum_notice_min = 1440, maximum_window_days = 30;
+```
+
+## API
+
+| Méthode | Route | Rôle |
+|---|---|---|
+| GET | `/api/checkout/{session_id}` | Vérifie le paiement et renvoie `{token}` |
+| GET | `/api/booking/{token}` | Client, heures achetées/réservées/restantes, rendez-vous existant |
+| GET | `/api/availability?token=&from=&to=` | `{slots: [{start, end}]}` |
+| POST | `/api/bookings` `{token, start}` | Crée le rendez-vous. Codes : 201 ; 409 `slot_taken` / `already_booked` ; 422 créneau non proposé ; 503 agenda indisponible |
+| POST | `/webhooks/stripe` | Webhook signé |
+| POST/GET | `/api/admin/login`, `/api/admin/overview` | Administration |
+
+## Hors MVP (évolutions prévues)
+
+Modification ou annulation de rendez-vous, réservation des heures suivantes (le verrou « une session par achat » est un index unique à assouplir), rappels, portail client, interface d’édition des réglages.

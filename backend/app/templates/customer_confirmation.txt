@@ -1,0 +1,25 @@
+Bonjour,
+
+Votre première session de conseil IA est confirmée.
+
+Date :
+{{ date_long }}
+
+Horaire :
+{{ hour_range }}
+{% if meet_url %}
+Lien visio :
+{{ meet_url }}
+{% endif %}
+Vous avez acheté :
+{{ hours_purchased_label }} de conseil
+
+Après cette première session :
+{{ hours_remaining_label }} {{ "restera" if hours_remaining == 1 else "resteront" }} à programmer.
+
+Une invitation calendrier vous a également été envoyée.
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence
