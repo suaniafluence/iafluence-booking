@@ -1,0 +1,14 @@
+Bonjour {{ name }},
+
+Merci pour votre achat : {{ product_name }}.
+
+Vous pouvez dès maintenant choisir le créneau de votre première session de conseil de 1 heure :
+
+{{ booking_url }}
+
+Si vous avez acheté plusieurs heures, les séances suivantes seront planifiées avec vous après cette première session.
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence

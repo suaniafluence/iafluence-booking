@@ -1,0 +1,16 @@
+Un remboursement Stripe a été reçu.
+
+Client :
+{{ name }} <{{ email }}>
+
+Prestation :
+{{ product_name }}
+
+Paiement :
+{{ stripe_payment_id }}
+
+Le lien de réservation a été révoqué.
+{% if booking %}
+ATTENTION : un rendez-vous est déjà planifié le {{ booking }}.
+Il n'a pas été annulé automatiquement — à traiter manuellement.
+{% endif %}

@@ -1,0 +1,24 @@
+Client :
+{{ name }}
+
+Email :
+{{ email }}
+
+Prestation :
+{{ product_name }}
+
+Paiement :
+Validé ({{ stripe_payment_id }})
+
+Rendez-vous :
+{{ date_short }}
+{{ hour_range }}
+{% if meet_url %}
+Visio :
+{{ meet_url }}
+{% endif %}
+Heures achetées :
+{{ hours_purchased }}
+
+Heures restantes :
+{{ hours_remaining }}
