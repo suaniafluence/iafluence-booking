@@ -1,4 +1,11 @@
-{$DOMAIN} {
+{
+	# The host's nginx terminates TLS and forwards to 127.0.0.1:${WEB_PORT}: keep its X-Forwarded-* headers.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
 	encode zstd gzip
 
 	header {

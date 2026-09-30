@@ -1,5 +1,8 @@
 services:
+  # Bundled database, started only with COMPOSE_PROFILES=localdb in .env.
+  # Production uses a managed Postgres instead (Neon): set DATABASE_URL and leave COMPOSE_PROFILES out.
   db:
+    profiles: [localdb]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -20,31 +23,25 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}}
     depends_on:
       db:
         condition: service_healthy
+        required: false
 
   web:
     # Stock Caddy image: the React app is built by CI and shipped as frontend/dist in the release,
     # so nothing (no Node, no npm) is needed on the server.
+    # Plain HTTP on localhost only: the host's nginx owns ports 80/443 and terminates TLS.
     image: caddy:2-alpine
     restart: unless-stopped
-    environment:
-      DOMAIN: ${DOMAIN}
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "127.0.0.1:${WEB_PORT:-3004}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ../frontend/dist:/srv:ro
-      - caddy_data:/data
-      - caddy_config:/config
     depends_on:
       - api
 
 volumes:
   pgdata:
-  caddy_data:
-  caddy_config:

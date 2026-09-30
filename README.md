@@ -1,5 +1,29 @@
 # IAfluence Booking
 
+[![CI](https://github.com/suaniafluence/iafluence-booking/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/suaniafluence/iafluence-booking/actions/workflows/ci.yml)
+[![Licence](https://img.shields.io/github/license/suaniafluence/iafluence-booking)](LICENSE)
+[![Dernier commit](https://img.shields.io/github/last-commit/suaniafluence/iafluence-booking)](https://github.com/suaniafluence/iafluence-booking/commits/main)
+[![Déploiement](https://img.shields.io/badge/d%C3%A9ploiement-manuel_(workflow__dispatch)-blue?logo=githubactions&logoColor=white)](https://github.com/suaniafluence/iafluence-booking/actions/workflows/deploy-prod.yml)
+
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![uv](https://img.shields.io/badge/uv-DE5FE9?logo=uv&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white)
+![Caddy](https://img.shields.io/badge/Caddy-derri%C3%A8re_nginx-1F88C0?logo=caddy&logoColor=white)
+![Stripe](https://img.shields.io/badge/Stripe-635BFF?logo=stripe&logoColor=white)
+![Google Calendar](https://img.shields.io/badge/Google_Calendar-4285F4?logo=googlecalendar&logoColor=white)
+
+![pytest](https://img.shields.io/badge/pytest-0A9EDC?logo=pytest&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-6E9F18?logo=vitest&logoColor=white)
+![Playwright](https://img.shields.io/badge/Playwright-E2E-2EAD33)
+![Couverture](https://img.shields.io/badge/couverture-%E2%89%A5_80_%25-brightgreen)
+![Mutation](https://img.shields.io/badge/mutation_(Stryker)-%E2%89%A5_75_%25-brightgreen)
+
 Réservation de la **première session de 1 h** après l’achat d’une prestation « Conseil IA » sur Stripe.
 
 Paiement Stripe → vérification → lien de réservation sécurisé → créneaux libres agrégés depuis plusieurs Google Calendars (free/busy uniquement) → création de l’événement Google Calendar + Meet + invitation → emails client et admin → suivi des heures achetées / réservées / restantes.
@@ -7,7 +31,7 @@ Paiement Stripe → vérification → lien de réservation sécurisé → créne
 ```
 backend/    FastAPI · SQLAlchemy · Alembic · PostgreSQL
 frontend/   React · Vite · TypeScript · Tailwind
-deploy/     Docker Compose · Caddy (TLS auto) · .env.example · release.sh (déploiement / rollback)
+deploy/     Docker Compose · Caddy (derrière le nginx du serveur) · .env.example · release.sh (déploiement / rollback)
 .github/    CI (tests) · Deploy Production (manuel)
 ```
 
@@ -144,7 +168,24 @@ Tester d’abord en mode test : carte `4242 4242 4242 4242`, puis `stripe listen
 
 ### 3. Serveur (VPS) et déploiement continu
 
-DNS : un enregistrement `A booking.iafluence.fr` qui pointe vers l’IP du VPS. Ports 80 et 443 ouverts.
+DNS : un enregistrement `A booking.iafluence.fr` qui pointe vers l’IP du VPS. Le nginx du serveur garde les ports 80/443 et le TLS (certbot) ; il transmet `booking.iafluence.fr` au Caddy de la pile, qui n’écoute que sur `127.0.0.1:3004` (`WEB_PORT` dans `shared/.env`) :
+
+```nginx
+server {
+    server_name booking.iafluence.fr;
+    client_max_body_size 5m;
+    location / {
+        proxy_pass http://127.0.0.1:3004;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    listen 80;
+}
+```
+
+Puis `sudo certbot --nginx -d booking.iafluence.fr` ajoute le HTTPS.
 
 Le serveur ne reçoit ni le dépôt, ni Node, ni les outils de test. GitHub Actions exécute les tests, construit le frontend et envoie une archive minimale (sources backend sans tests, `frontend/dist`, fichiers de `deploy/`). Sur le serveur, Docker Compose construit l’image API avec les seules dépendances runtime, puis sert le frontend via l’image Caddy officielle.
 
@@ -155,7 +196,7 @@ Le serveur ne reçoit ni le dépôt, ni Node, ni les outils de test. GitHub Acti
   shared/.env                secrets de production (jamais dans le dépôt ni dans l’archive)
 ```
 
-**Déployer :** GitHub → *Actions* → *Deploy Production* → *Run workflow* (branche `main`). Les jobs `test` → `build` → `deploy` s’enchaînent seulement si le précédent réussit. `deploy/release.sh` construit l’image pendant que l’ancienne version tourne, bascule `current`, redémarre, puis vérifie `/api/health` et la page d’accueil via Caddy. En cas d’échec, il revient automatiquement à la release précédente. Les tests tournent aussi à chaque push sur `main` et à chaque pull request (`.github/workflows/ci.yml`).
+**Déployer :** GitHub → *Actions* → *Deploy Production* → *Run workflow* (branche `main`). Les jobs `test` → `build` → `deploy` s’enchaînent seulement si le précédent réussit. `deploy/release.sh` construit l’image pendant que l’ancienne version tourne, bascule `current`, redémarre, puis vérifie `/api/health` et la page d’accueil via Caddy (`127.0.0.1:3004`). En cas d’échec, il revient automatiquement à la release précédente. Les tests tournent aussi sur chaque pull request vers `main` (`.github/workflows/ci.yml`), mais pas après la fusion.
 
 **Secrets GitHub** (*Settings → Secrets and variables → Actions*) : `PROD_HOST`, `PROD_USER`, `PROD_SSH_KEY` (clé privée dédiée), `PROD_SSH_KNOWN_HOSTS` (sortie de `ssh-keyscan -p PORT HOST`), `PROD_PORT` (facultatif, 22 par défaut). Variables facultatives : `PROD_URL` (`https://booking.iafluence.fr`, vérification publique après déploiement) et `PROD_APP_DIR` (`/var/www/iafluence-booking` par défaut).
 
@@ -193,7 +234,9 @@ cd backend && uv run python -c "from argon2 import PasswordHasher; print(Passwor
 
 Placer la valeur entre apostrophes dans `ADMIN_PASSWORD_HASH='…'`.
 
-**Sauvegardes :**
+**Base de données :** en production, Neon (`DATABASE_URL=postgresql+psycopg://…` dans `shared/.env`, sans `COMPOSE_PROFILES`) ; Neon assure les sauvegardes et la restauration à un instant donné. Avec `COMPOSE_PROFILES=localdb`, la pile démarre son propre conteneur PostgreSQL.
+
+**Sauvegardes (base locale uniquement) :**
 
 ```bash
 /var/www/iafluence-booking/current/deploy/release.sh compose exec -T db pg_dump -U iafluence iafluence | gzip > backup-$(date +%F).sql.gz

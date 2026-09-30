@@ -35,8 +35,7 @@ env_value() {
 
 [ -f "$SHARED_ENV" ] || die "$SHARED_ENV is missing (start from deploy/.env.example)"
 PROJECT=$(env_value COMPOSE_PROJECT_NAME iafluence)
-DOMAIN=$(env_value DOMAIN "")
-[ -n "$DOMAIN" ] || die "DOMAIN is not set in $SHARED_ENV"
+WEB_PORT=$(env_value WEB_PORT 3004)
 
 compose() {
   local id=$1; shift
@@ -61,8 +60,8 @@ health_check() {
   for i in $(seq 1 40); do
     if compose "$id" exec -T api python -c \
          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)" >/dev/null 2>&1 \
-       && curl -fsSk --max-time 5 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/api/health" >/dev/null 2>&1 \
-       && curl -fsSk --max-time 5 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/" 2>/dev/null | grep -q 'id="root"'; then
+       && curl -fsS --max-time 5 "http://127.0.0.1:$WEB_PORT/api/health" >/dev/null 2>&1 \
+       && curl -fsS --max-time 5 "http://127.0.0.1:$WEB_PORT/" 2>/dev/null | grep -q 'id="root"'; then
       log "Health check OK (API, then API and frontend through Caddy)"
       return 0
     fi
