@@ -1,21 +1,28 @@
-FROM python:3.12-slim
+# Build stage: install runtime dependencies only (no pytest/httpx) into /app/.venv.
+FROM python:3.12-slim AS build
 
-ENV PYTHONUNBUFFERED=1 \
-    UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
 COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /usr/local/bin/uv
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY alembic.ini ./
-COPY alembic ./alembic
-COPY app ./app
-COPY scripts ./scripts
+# Runtime stage: no uv, no build cache.
+FROM python:3.12-slim
 
-ENV PATH="/app/.venv/bin:$PATH"
-RUN useradd --create-home app && chown -R app /app
+ENV PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+RUN useradd --create-home app && mkdir /app && chown app /app
+
+WORKDIR /app
+COPY --from=build --chown=app /app/.venv ./.venv
+COPY --chown=app alembic.ini ./
+COPY --chown=app alembic ./alembic
+COPY --chown=app app ./app
+COPY --chown=app scripts ./scripts
 USER app
 
 EXPOSE 8000

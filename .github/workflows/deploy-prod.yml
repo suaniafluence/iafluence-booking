@@ -1,0 +1,144 @@
+# Manual production deployment: GitHub → Actions → Deploy Production → Run workflow.
+#
+#   test   → CI (pytest on PostgreSQL, TypeScript check)
+#   build  → frontend build + minimal release archive (no tests, no sources the server does not need)
+#   deploy → upload over SSH, then deploy/release.sh on the server: build the API image (runtime
+#            dependencies only), switch `current`, restart, health check, automatic rollback on failure.
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build release
+    needs: test
+    runs-on: ubuntu-24.04
+    outputs:
+      release_id: ${{ steps.meta.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Release id
+        id: meta
+        run: echo "release_id=$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      # Same Dockerfile the server will use: fail here rather than on the server.
+      - name: Check the API image builds
+        run: docker build --quiet --tag iafluence-booking-api:ci backend
+
+      - name: Assemble release archive
+        env:
+          RELEASE_ID: ${{ steps.meta.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          out=release
+          mkdir -p "$out/backend" "$out/frontend" "$out/deploy"
+          cp backend/Dockerfile backend/.dockerignore backend/pyproject.toml backend/uv.lock backend/alembic.ini "$out/backend/"
+          cp -r backend/alembic backend/app backend/scripts "$out/backend/"
+          cp -r frontend/dist "$out/frontend/dist"
+          cp deploy/docker-compose.yml deploy/Caddyfile deploy/release.sh "$out/deploy/"
+          find "$out" -name __pycache__ -prune -exec rm -rf {} +
+          printf 'release=%s\ncommit=%s\nref=%s\nrun=%s/%s/actions/runs/%s\n' \
+            "$RELEASE_ID" "$GITHUB_SHA" "$GITHUB_REF_NAME" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > "$out/REVISION"
+          tar -C "$out" -czf release.tar.gz .
+          echo "### Release $RELEASE_ID ($(du -h release.tar.gz | cut -f1))" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          (cd "$out" && find . -maxdepth 2 | sort) >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  deploy:
+    name: Deploy to production
+    needs: build
+    # Never deploy a feature branch by mistake.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      url: ${{ vars.PROD_URL }}
+    env:
+      APP_DIR: ${{ vars.PROD_APP_DIR || '/var/www/iafluence-booking' }}
+      RELEASE_ID: ${{ needs.build.outputs.release_id }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+
+      - name: Configure SSH
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_PORT: ${{ secrets.PROD_PORT }}
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for v in PROD_HOST PROD_USER PROD_SSH_KEY PROD_SSH_KNOWN_HOSTS; do
+            [ -n "${!v}" ] || { echo "::error::Missing secret $v"; exit 1; }
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PROD_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host prod
+            HostName $PROD_HOST
+            User $PROD_USER
+            Port ${PROD_PORT:-22}
+            IdentityFile ~/.ssh/id_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 15
+          EOF
+
+      - name: Upload release
+        run: |
+          set -euo pipefail
+          ssh prod "mkdir -p '$APP_DIR/releases/$RELEASE_ID'"
+          scp -q release.tar.gz "prod:$APP_DIR/releases/$RELEASE_ID.tar.gz"
+          ssh prod "tar -xzf '$APP_DIR/releases/$RELEASE_ID.tar.gz' -C '$APP_DIR/releases/$RELEASE_ID' && rm '$APP_DIR/releases/$RELEASE_ID.tar.gz'"
+
+      - name: Activate release (build, switch, restart, health check)
+        run: ssh prod "bash '$APP_DIR/releases/$RELEASE_ID/deploy/release.sh' activate '$RELEASE_ID'"
+
+      - name: Public health check
+        if: vars.PROD_URL != ''
+        env:
+          PROD_URL: ${{ vars.PROD_URL }}
+        run: |
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "${PROD_URL%/}/api/health"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "${PROD_URL%/}/" | grep -q 'id="root"'
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_deploy
