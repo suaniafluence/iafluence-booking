@@ -1,6 +1,7 @@
 """Availability listing and booking with double-booking protection (R06, R10)."""
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import select, text
@@ -49,12 +50,20 @@ class InvalidToken(BookingError):
     status_code, code, message = 404, "invalid_token", "Ce lien de réservation est invalide ou a expiré."
 
 
+@dataclass(frozen=True)
+class BookedSlot:
+    start_datetime: datetime
+    end_datetime: datetime
+    meet_url: str | None
+
+
 class AlreadyBooked(BookingError):
     status_code, code, message = 409, "already_booked", "Votre première session est déjà réservée."
 
     def __init__(self, booking: Booking):
         super().__init__()
-        self.booking = booking
+        # Copied now: the ORM instance is expired by a rollback and detached once the request session closes.
+        self.booking = BookedSlot(booking.start_datetime, booking.end_datetime, booking.meet_url)
 
 
 class NoHoursLeft(BookingError):
@@ -165,8 +174,9 @@ def book(db: Session, calendar: CalendarGateway, token: str, start: datetime, no
     )
     existing = confirmed_booking(db, purchase_id)
     if existing is not None:
+        exc = AlreadyBooked(existing)
         db.rollback()
-        raise AlreadyBooked(existing)
+        raise exc
     if purchase.payment_status != "paid" or purchase.hours_remaining < 1:
         db.rollback()
         raise InvalidToken() if purchase.payment_status != "paid" else NoHoursLeft()

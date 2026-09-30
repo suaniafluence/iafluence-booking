@@ -64,12 +64,53 @@ http://localhost:5173/reservation?session_id=cs_demo_5h_jean. Les calendriers co
 
 ## Tests
 
+| Niveau | Outil | Commande | Seuil |
+|---|---|---|---|
+| Unitaires + intégration backend | pytest + PostgreSQL réel | `uv run pytest --cov` | couverture ≥ 80 % (bloquant) |
+| Unitaires frontend | Vitest + Testing Library | `npm run test:coverage` | couverture ≥ 80 % (bloquant) |
+| Mutation backend | mutmut (dans Docker) | `./mutation.sh` | rapport |
+| Mutation frontend | Stryker | `npm run test:mutation` | score ≥ 75 % (bloquant) |
+| End-to-end | Playwright | `npm run test:e2e` | — |
+
+Une base PostgreSQL de test (port 5433 pour ne pas gêner une base de dev) :
+
 ```bash
-cd backend
-TEST_DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/iafluence_test uv run pytest
+docker run -d --name iafluence-test-db -e POSTGRES_PASSWORD=dev -p 127.0.0.1:5433:5432 postgres:16-alpine
+docker exec iafluence-test-db psql -U postgres -c "CREATE DATABASE iafluence_test" -c "CREATE DATABASE iafluence_e2e" -c "CREATE DATABASE iafluence_mutation"
 ```
 
-Sans `TEST_DATABASE_URL`, seuls les tests unitaires (moteur de créneaux, passerelle Google) s’exécutent. Les tests d’intégration utilisent un vrai PostgreSQL (contrainte d’exclusion, verrous) et des faux Google et Stripe. Ils couvrent notamment les réservations concurrentes, l’idempotence des webhooks, les remboursements et l’absence de fuite d’identifiants de calendrier.
+> Sous Windows, utilisez `127.0.0.1` et non `localhost` dans les URL de base : la résolution IPv6 de `localhost` ajoute ~2 s par connexion (9 min au lieu de 10 s pour la suite).
+
+**Backend** — sans `TEST_DATABASE_URL`, seuls les tests unitaires s’exécutent. Les tests d’intégration utilisent un vrai PostgreSQL (contrainte d’exclusion, verrous) et des faux Google et Stripe : réservations concurrentes, courses résolues sous verrou, compensation Google Calendar, retard de propagation free/busy, idempotence des webhooks, remboursements, contenu exact des emails, sessions admin falsifiées ou expirées, scripts CLI.
+
+```bash
+cd backend
+TEST_DATABASE_URL=postgresql+psycopg://postgres:dev@127.0.0.1:5433/iafluence_test uv run pytest --cov
+```
+
+**Frontend** — les tests s’exécutent dans le fuseau `America/Los_Angeles` pour garantir que les horaires restent affichés à l’heure de Paris quel que soit le fuseau du visiteur.
+
+```bash
+cd frontend
+npm run test:coverage
+```
+
+**Tests de mutation** — ils modifient le code (un `<` devient `<=`, une condition devient `True`…) et vérifient qu’au moins un test échoue.
+
+```bash
+cd backend && ./mutation.sh                 # tout le backend, ~40 min ; ou ./mutation.sh "app.services.availability*"
+cd frontend && npm run test:mutation        # ~3 min
+```
+
+`mutmut` ne fonctionne pas sous Windows (il utilise `fork()`) : `mutation.sh` le lance dans un conteneur Linux, sur une copie du code, avec la base `iafluence_mutation` (variable `MUTATION_DATABASE_URL` pour en changer). Rapports : `backend/mutation-report/` (liste et diff des mutants survivants) et `frontend/reports/mutation/index.html`. Les lignes de log, les modèles déclaratifs et les faux de démo ne sont pas mutés.
+
+**End-to-end** — Playwright démarre le vrai backend (mode `FAKE_INTEGRATIONS`, base `iafluence_e2e` remise à zéro à chaque exécution) et le build de production du frontend, puis pilote un navigateur : du retour Stripe au rendez-vous confirmé (bureau et mobile), deux clients sur le même créneau, liens invalides, administration.
+
+```bash
+cd frontend
+npx playwright install chromium   # une fois
+npm run test:e2e                  # E2E_DATABASE_URL, UV (chemin de uv) et PW_CHANNEL=msedge sont optionnels
+```
 
 ## Mise en production
 

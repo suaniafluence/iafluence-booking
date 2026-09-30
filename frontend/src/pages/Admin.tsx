@@ -29,7 +29,12 @@ export default function Admin() {
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Tableau de bord</h1>
         <Button
           variant="secondary"
-          onClick={() => api.adminLogout().finally(() => setNeedsLogin(true))}
+          onClick={() =>
+            api
+              .adminLogout()
+              .catch(() => {}) // back to the login form even if the request fails
+              .finally(() => setNeedsLogin(true))
+          }
         >
           Déconnexion
         </Button>

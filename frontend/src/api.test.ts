@@ -1,0 +1,87 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { api, ApiError } from "./api";
+
+function mockFetch(status: number, body: unknown, json = true) {
+  const fn = vi.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: json ? () => Promise.resolve(body) : () => Promise.reject(new SyntaxError("not json")),
+  });
+  vi.stubGlobal("fetch", fn);
+  return fn;
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("api", () => {
+  it("GET endpoints encode their parameters and send same-origin JSON requests", async () => {
+    const fetch = mockFetch(200, { token: "t" });
+    await expect(api.exchangeCheckout("cs_a/b?c")).resolves.toEqual({ token: "t" });
+    expect(fetch).toHaveBeenCalledWith("/api/checkout/cs_a%2Fb%3Fc", {
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    await api.context("to/k");
+    expect(fetch).toHaveBeenLastCalledWith("/api/booking/to%2Fk", expect.anything());
+    await api.availability("a&b=c");
+    expect(fetch).toHaveBeenLastCalledWith("/api/availability?token=a%26b%3Dc", expect.anything());
+    await api.adminOverview();
+    expect(fetch).toHaveBeenLastCalledWith("/api/admin/overview", expect.anything());
+  });
+
+  it("POST endpoints send a JSON body", async () => {
+    const fetch = mockFetch(201, { status: "confirmed" });
+    await api.book("tok", "2026-10-08T14:00:00+02:00");
+    expect(fetch).toHaveBeenLastCalledWith("/api/bookings", {
+      method: "POST",
+      body: JSON.stringify({ token: "tok", start: "2026-10-08T14:00:00+02:00" }),
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+    });
+    await api.adminLogin("secret");
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/login",
+      expect.objectContaining({ method: "POST", body: '{"password":"secret"}' }),
+    );
+    await api.adminLogout();
+    expect(fetch).toHaveBeenLastCalledWith("/api/admin/logout", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("turns API errors into ApiError with the server message and code", async () => {
+    mockFetch(409, { detail: "Créneau pris", code: "slot_taken" });
+    const err = await api.book("t", "s").catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toMatchObject({ status: 409, message: "Créneau pris", code: "slot_taken" });
+  });
+
+  it("uses a generic message when the error detail is not a string (e.g. validation errors)", async () => {
+    mockFetch(422, { detail: [{ loc: ["body"], msg: "bad" }] });
+    await expect(api.book("t", "s")).rejects.toMatchObject({
+      status: 422,
+      message: "Une erreur est survenue. Veuillez réessayer.",
+      code: undefined,
+    });
+  });
+
+  it("copes with non-JSON error pages (e.g. proxy 502)", async () => {
+    mockFetch(502, null, false);
+    await expect(api.context("t")).rejects.toMatchObject({ status: 502, message: "Une erreur est survenue. Veuillez réessayer." });
+  });
+
+  it("returns an empty object for a successful non-JSON response", async () => {
+    mockFetch(200, null, false);
+    await expect(api.adminLogout()).resolves.toEqual({});
+  });
+
+  it("reports network failures as status 0", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    await expect(api.context("t")).rejects.toMatchObject({
+      status: 0,
+      message: "Connexion impossible. Vérifiez votre connexion internet puis réessayez.",
+    });
+  });
+});
