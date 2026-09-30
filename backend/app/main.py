@@ -6,20 +6,30 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.config import get_config
-from app.deps import get_mailer
+from app.deps import get_codex, get_fireflies, get_mailer, get_now
 from app.routers import admin, public, webhooks
-from app.services import follow_up
+from app.services import follow_up, session_reports
 from app.services.booking_service import AlreadyBooked, BookingError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+def report_gateways() -> session_reports.Gateways:
+    return session_reports.Gateways(mailer=get_mailer(), fireflies=get_fireflies(), codex=get_codex())
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    interval = get_config().follow_up_poll_seconds
-    task = asyncio.create_task(follow_up.run_forever(get_mailer, interval)) if interval > 0 else None
+    cfg = get_config()
+    interval = cfg.follow_up_poll_seconds
+    tasks = []
+    if interval > 0:
+        tasks.append(asyncio.create_task(follow_up.run_forever(get_mailer, interval)))
+        if cfg.session_reports_enabled:
+            # Its own loop: a Codex turn lasts minutes and must not delay the closing of sessions.
+            tasks.append(asyncio.create_task(session_reports.run_forever(report_gateways, interval, get_now)))
     yield
-    if task is not None:
+    for task in tasks:
         task.cancel()
 
 

@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_config
 from app.db import get_db
-from app.deps import get_calendar, get_mailer, get_now
-from app.models import Booking, BookingToken, Customer, Purchase
+from app.deps import get_calendar, get_codex, get_mailer, get_now
+from app.models import Booking, BookingToken, CodexLogin, Customer, Purchase, SessionReport
 from app.schemas import (
     CancelBookingIn,
     CustomerPatchIn,
@@ -20,8 +20,10 @@ from app.schemas import (
     ManualClientIn,
     ManualClientOut,
     PurchaseHoursIn,
+    ReportSettingsIn,
 )
-from app.services import booking_service, manual_purchase, notifications
+from app.services import booking_service, codex_login, manual_purchase, notifications, session_reports
+from app.services.codex import CodexUnavailable
 from app.services.settings_service import get_settings
 
 router = APIRouter(prefix="/api/admin")
@@ -164,6 +166,11 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
             }
             for p in purchases
         ],
+        "reports": {
+            "enabled": get_config().session_reports_enabled,
+            "send_without_review": settings.send_reports_without_review,
+            "sessions": session_reports.overview(db, tz),
+        },
     }
 
 
@@ -229,3 +236,101 @@ def update_purchase_hours(purchase_id: int, body: PurchaseHoursIn, db: Session =
     purchase.hours_purchased = body.hours_purchased
     db.commit()
     return booking_service.hours_summary(purchase)
+
+
+# --- session reports -------------------------------------------------------------------------------------------
+
+
+def _report_action(action):
+    try:
+        return action()
+    except session_reports.ReportActionError as e:
+        raise HTTPException(e.status_code, e.message)
+
+
+@router.get("/reports/{report_id}/image.png", dependencies=[Depends(require_admin)])
+def report_image(report_id: int, db: Session = Depends(get_db)):
+    png = db.scalar(select(SessionReport.image_png).where(SessionReport.id == report_id))
+    if png is None:
+        raise HTTPException(404, "Pas d'infographie pour ce compte rendu.")
+    return Response(png, media_type="image/png", headers={"Cache-Control": "private, no-store"})
+
+
+@router.post("/reports/{report_id}/retry", dependencies=[Depends(require_admin)])
+def retry_report(report_id: int, db: Session = Depends(get_db), now: datetime = Depends(get_now)):
+    """« Relancer » : the Fireflies search (6 h more), or the summary if the transcript was found."""
+    report = _report_action(lambda: session_reports.retry(db, report_id, now))
+    return {"id": report.id, "status": report.status}
+
+
+@router.post("/reports/{report_id}/draft-without-summary", dependencies=[Depends(require_admin)])
+def draft_without_summary(
+    report_id: int,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    mailer=Depends(get_mailer),
+    now: datetime = Depends(get_now),
+):
+    email = _report_action(lambda: session_reports.draft_without_summary(db, report_id, now))
+    background.add_task(session_reports.deliver, mailer, email)
+    return {"id": report_id, "status": "drafted"}
+
+
+@router.patch("/report-settings", dependencies=[Depends(require_admin)])
+def update_report_settings(body: ReportSettingsIn, db: Session = Depends(get_db)):
+    """« Envoyer aussi les résumés sans relecture » for the clients on « Envoi auto »."""
+    settings = get_settings(db)
+    settings.send_reports_without_review = body.send_without_review
+    db.commit()
+    return {"send_without_review": settings.send_reports_without_review}
+
+
+# --- Codex connection (device authorization) -------------------------------------------------------------------
+
+
+def _codex_call(action):
+    try:
+        return action()
+    except CodexUnavailable as e:
+        raise HTTPException(502, f"Le service Codex est injoignable : {e}")
+
+
+def _login(db: Session, login_id: int) -> CodexLogin:
+    login = db.scalar(select(CodexLogin).where(CodexLogin.id == login_id).with_for_update())
+    if login is None:
+        raise HTTPException(404, "Connexion introuvable.")
+    return login
+
+
+@router.get("/codex", dependencies=[Depends(require_admin)])
+def codex_status(db: Session = Depends(get_db), codex=Depends(get_codex), now: datetime = Depends(get_now)):
+    """connected / expired / disconnected / unavailable. Never any token: they stay in the codex container."""
+    if not get_config().session_reports_enabled:
+        return {"state": "not_configured", "email": None, "plan": None, "detail": None, "pending_login": None}
+    return codex_login.status(db, codex, now)
+
+
+@router.post("/codex/login", status_code=201, dependencies=[Depends(require_admin)])
+def codex_start_login(db: Session = Depends(get_db), codex=Depends(get_codex), now: datetime = Depends(get_now)):
+    """« Connecter Codex » : device code to type on https://auth.openai.com/codex/device."""
+    return codex_login.login_dict(_codex_call(lambda: codex_login.start(db, codex, now)))
+
+
+@router.get("/codex/login/{login_id}", dependencies=[Depends(require_admin)])
+def codex_login_status(
+    login_id: int, db: Session = Depends(get_db), codex=Depends(get_codex), now: datetime = Depends(get_now)
+):
+    return codex_login.login_dict(codex_login.refresh(db, codex, _login(db, login_id), now))
+
+
+@router.post("/codex/login/{login_id}/cancel", dependencies=[Depends(require_admin)])
+def codex_cancel_login(
+    login_id: int, db: Session = Depends(get_db), codex=Depends(get_codex), now: datetime = Depends(get_now)
+):
+    return codex_login.login_dict(codex_login.cancel(db, codex, _login(db, login_id), now))
+
+
+@router.post("/codex/logout", dependencies=[Depends(require_admin)])
+def codex_logout(db: Session = Depends(get_db), codex=Depends(get_codex), now: datetime = Depends(get_now)):
+    _codex_call(lambda: codex_login.logout(db, codex, now))
+    return {"state": "disconnected"}

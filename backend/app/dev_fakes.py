@@ -1,20 +1,31 @@
-"""In-memory stand-ins for Google and Stripe, for local demos only (FAKE_INTEGRATIONS=true).
+"""In-memory stand-ins for Google, Stripe, Gmail, Fireflies and Codex, for local demos only (FAKE_INTEGRATIONS=true).
 
 - Any checkout session id of the form `cs_demo_<hours>h_<anything>` is a paid purchase,
   e.g. /reservation?session_id=cs_demo_5h_jean
 - Calendars have a few fixed busy periods; created events are kept in memory.
-- Emails are printed to the log instead of being sent.
+- Emails are printed to the log instead of being sent (and saved as .eml files if DEMO_OUTBOX_DIR is set).
+- Fireflies has a recording of every booked session; « Connecter Codex » succeeds on its own after a few seconds,
+  and the demo agent writes a summary from the session context.
 """
 
+import json
 import logging
 import re
+import secrets
 import threading
 import uuid
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
+
+from app.config import get_config
 from app.services.availability import Interval
 from app.services.calendar_service import CreatedEvent
+from app.services.codex import CodexAccount, CodexNotConnected, DeviceCode
+from app.services.email_service import build_message
+from app.services.fireflies import Sentence, TranscriptMeta
 
 log = logging.getLogger("dev_fakes")
 PARIS = ZoneInfo("Europe/Paris")
@@ -50,11 +61,154 @@ class DemoCalendar:
 
 
 class DemoMailer:
-    def send(self, to, subject, body):
-        log.info("[demo] email to %s — %s\n%s", to, subject, body)
+    def __init__(self):
+        self._count = 0
+        self._lock = threading.Lock()
 
-    def draft(self, to, subject, body):
+    def _save(self, kind, to, subject, body, parts):
+        outbox = get_config().demo_outbox_dir
+        if not outbox:
+            return
+        with self._lock:
+            self._count += 1
+            name = f"{datetime.now(UTC):%Y%m%d-%H%M%S}-{self._count:04d}-{kind}.eml"
+        Path(outbox).mkdir(parents=True, exist_ok=True)
+        (Path(outbox) / name).write_bytes(build_message(to, subject, body, **parts).as_bytes())
+
+    def send(self, to, subject, body, **parts):
+        log.info("[demo] email to %s — %s\n%s", to, subject, body)
+        self._save("sent", to, subject, body, parts)
+
+    def draft(self, to, subject, body, **parts):
         log.info("[demo] draft to %s — %s\n%s", to, subject, body)
+        self._save("draft", to, subject, body, parts)
+
+
+class DemoFireflies:
+    """Every session booked in the demo was « recorded »: its transcript is a short canned conversation."""
+
+    def list_transcripts(self, time_min, time_max):
+        from app.db import SessionLocal
+        from app.models import Booking
+
+        with SessionLocal() as db:
+            bookings = db.scalars(
+                select(Booking).where(Booking.start_datetime >= time_min, Booking.start_datetime <= time_max)
+            ).all()
+            return [
+                TranscriptMeta(
+                    id=f"demo_{b.id}",
+                    start=b.start_datetime,
+                    emails=frozenset({b.customer.email.lower(), "contact@iafluence.fr"}),
+                    meeting_link=b.meet_url,
+                )
+                for b in bookings
+            ]
+
+    def sentences(self, transcript_id):
+        return [
+            Sentence("Consultant", "Bonjour ! Aujourd'hui, on fait le point sur vos usages de l'IA générative."),
+            Sentence("Client", "Je voudrais automatiser les réponses aux demandes de devis."),
+            Sentence("Consultant", "Commençons par un assistant qui prépare un brouillon à partir de vos modèles."),
+            Sentence("Client", "D'accord, je rassemble dix exemples de devis pour la prochaine fois."),
+        ]
+
+
+DEMO_LOGIN_DELAY_S = 4
+
+
+class DemoCodex:
+    """Device login approved « on the OpenAI page » after DEMO_LOGIN_DELAY_S; the agent answers without a model."""
+
+    def __init__(self):
+        self.connected = False
+        self._timers: dict[str, threading.Timer] = {}
+        self._lock = threading.Lock()
+
+    def account(self):
+        return CodexAccount(email="demo@iafluence.fr", plan="plus") if self.connected else None
+
+    def start_login(self, on_done):
+        login_id = uuid.uuid4().hex
+
+        def approve():
+            with self._lock:
+                self._timers.pop(login_id, None)
+                self.connected = True
+            on_done(login_id, "COMPLETED", None)
+
+        timer = threading.Timer(DEMO_LOGIN_DELAY_S, approve)
+        timer.daemon = True
+        with self._lock:
+            self._timers[login_id] = timer
+        timer.start()
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+        code = "".join(secrets.choice(alphabet) for _ in range(4)) + "-" + f"{secrets.randbelow(10_000):04d}"
+        return DeviceCode(login_id, "https://auth.openai.com/codex/device", code)
+
+    def cancel_login(self, login_id):
+        with self._lock:
+            timer = self._timers.pop(login_id, None)
+        if timer:
+            timer.cancel()
+
+    def logout(self):
+        self.connected = False
+
+    def run_turn(self, *, instructions, prompt, output_schema):
+        if not self.connected:
+            raise CodexNotConnected("Codex n'est pas connecté")
+        ctx = json.loads(prompt.split("Contexte de la séance (JSON) :\n", 1)[1].split("\n\nTranscription", 1)[0])
+        number, client = ctx["seance_numero"], ctx["client"]
+        last = ctx["derniere_seance"]
+        synthese = {
+            "objectifs": ["Identifier les usages de l'IA générative les plus utiles à votre activité"],
+            "points_abordes": [
+                "Automatisation des réponses aux demandes de devis",
+                "Assistant qui prépare un brouillon à partir de vos modèles",
+            ],
+            "decisions": ["Commencer par un assistant de rédaction de devis"],
+            "actions_client": ["Rassembler dix exemples de devis représentatifs"],
+            "prochaines_etapes": (
+                ["Poursuivre en autonomie avec la méthode vue ensemble"]
+                if last
+                else ["Construire et tester l'assistant lors de la prochaine séance"]
+            ),
+        }
+        return json.dumps({"synthese": synthese, "image": demo_infographic(number, client, synthese)}, ensure_ascii=False)
+
+
+def demo_infographic(number: int, client: str, synthese: dict) -> str:
+    from xml.sax.saxutils import escape
+
+    blocks = [
+        ("Points clés", synthese["points_abordes"]),
+        ("Décisions", synthese["decisions"]),
+        ("Vos actions", synthese["actions_client"]),
+        ("Prochaines étapes", synthese["prochaines_etapes"]),
+    ]
+    parts = [
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">',
+        '<rect width="1200" height="800" fill="#eef2ff"/>',
+        '<rect x="0" y="0" width="1200" height="120" fill="#1e1b4b"/>',
+        f'<text x="60" y="78" font-family="DejaVu Sans, sans-serif" font-size="40" fill="#ffffff">'
+        f"Séance n° {number} — {escape(client)}</text>",
+    ]
+    for i, (title, items) in enumerate(blocks):
+        x, y = 60 + (i % 2) * 560, 170 + (i // 2) * 300
+        parts.append(f'<rect x="{x}" y="{y}" width="520" height="260" rx="24" fill="#ffffff" stroke="#c7d2fe"/>')
+        parts.append(
+            f'<text x="{x + 30}" y="{y + 55}" font-family="DejaVu Sans, sans-serif" font-size="30" '
+            f'font-weight="bold" fill="#4338ca">{escape(title)}</text>'
+        )
+        for j, item in enumerate(items[:3]):
+            line = item if len(item) <= 34 else item[:33] + "…"
+            parts.append(
+                f'<text x="{x + 30}" y="{y + 110 + j * 50}" font-family="DejaVu Sans, sans-serif" font-size="24" '
+                f'fill="#1e1b4b">• {escape(line)}</text>'
+            )
+    parts.append("</svg>")
+    return "".join(parts)
 
 
 class DemoStripe:

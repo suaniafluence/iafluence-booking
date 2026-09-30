@@ -1,0 +1,15 @@
+Compte rendu de séance : action requise.
+
+Client :
+{{ name }} <{{ email }}>
+
+Séance :
+{{ date_short }} {{ hour_range }}
+
+Problème :
+{{ problem }}
+
+{{ action }}
+
+Administration :
+{{ admin_url }}

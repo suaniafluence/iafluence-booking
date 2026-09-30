@@ -7,34 +7,57 @@ import pytest
 
 from app import deps
 from app.config import Config
-from app.dev_fakes import PARIS, DemoCalendar, DemoMailer, DemoStripe
-from app.services import google_client
+from app import dev_fakes
+from app.dev_fakes import PARIS, DemoCalendar, DemoCodex, DemoFireflies, DemoMailer, DemoStripe
+from app.services import google_client, report_content
 from app.services.availability import Interval
 from app.services.calendar_service import GoogleCalendarGateway
+from app.services.codex import CodexNotConnected, LiveCodex
 from app.services.email_service import GmailMailer
+from app.services.fireflies import LiveFireflies
 from app.services.stripe_service import LiveStripeGateway, PaymentInvalid, parse_checkout
+
+
+GATEWAYS = (deps.get_calendar, deps.get_mailer, deps.get_stripe, deps.get_fireflies, deps.get_codex)
 
 
 @pytest.fixture
 def fresh_deps():
-    for f in (deps.get_calendar, deps.get_mailer, deps.get_stripe):
+    for f in GATEWAYS:
         f.cache_clear()
     yield
-    for f in (deps.get_calendar, deps.get_mailer, deps.get_stripe):
+    for f in GATEWAYS:
         f.cache_clear()
 
 
 @pytest.mark.parametrize(
     "fake, expected",
-    [(True, (DemoCalendar, DemoMailer, DemoStripe)), (False, (GoogleCalendarGateway, GmailMailer, LiveStripeGateway))],
+    [
+        (True, (DemoCalendar, DemoMailer, DemoStripe, DemoFireflies, DemoCodex)),
+        (False, (GoogleCalendarGateway, GmailMailer, LiveStripeGateway, LiveFireflies, LiveCodex)),
+    ],
     ids=["demo", "live"],
 )
 def test_gateways_follow_fake_integrations_flag(monkeypatch, fresh_deps, fake, expected):
     monkeypatch.setattr(deps, "get_config", lambda: Config(fake_integrations=fake))
-    got = (deps.get_calendar(), deps.get_mailer(), deps.get_stripe())
+    got = tuple(f() for f in GATEWAYS)
     assert tuple(type(g) for g in got) == expected
-    # Singletons: the demo calendar must keep its in-memory events between requests.
-    assert deps.get_calendar() is got[0]
+    # Singletons: the demo calendar keeps its events, the demo Codex its connection, between requests.
+    assert all(f() is g for f, g in zip(GATEWAYS, got))
+
+
+@pytest.mark.parametrize(
+    "values, enabled",
+    [
+        ({}, False),
+        ({"fireflies_api_key": "k"}, False),
+        ({"codex_app_server_url": "ws://codex:4500"}, False),
+        ({"fireflies_api_key": "k", "codex_app_server_url": "ws://codex:4500"}, True),
+        ({"fake_integrations": True}, True),
+    ],
+)
+def test_session_reports_need_fireflies_and_codex(values, enabled):
+    assert Config(**values).session_reports_enabled is enabled
 
 
 def test_get_now_is_aware_utc():
@@ -151,3 +174,80 @@ def test_booking_tokens_are_256_bit_url_safe_and_unique():
     for t in tokens:
         assert re.fullmatch(r"[A-Za-z0-9_-]{43}", t)
         assert len(base64.urlsafe_b64decode(t + "=")) == 32
+
+
+def test_demo_mailer_saves_emails_to_the_outbox(tmp_path, monkeypatch):
+    monkeypatch.setattr(dev_fakes, "get_config", lambda: Config(demo_outbox_dir=str(tmp_path / "out")))
+    from app.services import email_service
+
+    monkeypatch.setattr(email_service, "get_config", lambda: Config(mail_from="contact@iafluence.fr"))
+    mailer = DemoMailer()
+    mailer.send("a@example.com", "Sujet", "Corps")
+    mailer.draft("b@example.com", "Brouillon", "Texte", html="<p>Texte</p>", images={"img": b"\x89PNG"})
+    files = sorted((tmp_path / "out").iterdir())
+    assert [f.name.split("-", 2)[2] for f in files] == ["0001-sent.eml", "0002-draft.eml"]
+    import email as email_lib
+    from email import policy
+
+    draft = email_lib.message_from_bytes(files[1].read_bytes(), policy=policy.default)
+    assert draft["To"] == "b@example.com" and draft.get_content_type() == "multipart/alternative"
+
+
+def test_demo_mailer_without_outbox_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(dev_fakes, "get_config", lambda: Config(demo_outbox_dir=""))
+    DemoMailer().draft("a@example.com", "S", "B")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_demo_fireflies_transcript_is_canned():
+    sentences = DemoFireflies().sentences("demo_1")
+    assert len(sentences) == 4 and sentences[1].speaker == "Client"
+
+
+def test_demo_codex_login_is_approved_after_a_delay(monkeypatch):
+    monkeypatch.setattr(dev_fakes, "DEMO_LOGIN_DELAY_S", 0.05)
+    codex = DemoCodex()
+    assert codex.account() is None
+    done = []
+    code = codex.start_login(lambda *a: done.append(a))
+    assert code.verification_url == "https://auth.openai.com/codex/device"
+    import re
+    import time
+
+    assert re.fullmatch(r"[A-Z]{4}-\d{4}", code.user_code)
+    deadline = time.monotonic() + 3
+    while not done and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert done == [(code.login_id, "COMPLETED", None)]
+    assert codex.account().email == "demo@iafluence.fr"
+    codex.logout()
+    assert codex.account() is None
+
+
+def test_demo_codex_login_can_be_cancelled(monkeypatch):
+    monkeypatch.setattr(dev_fakes, "DEMO_LOGIN_DELAY_S", 0.2)
+    codex = DemoCodex()
+    done = []
+    code = codex.start_login(lambda *a: done.append(a))
+    codex.cancel_login(code.login_id)
+    codex.cancel_login("unknown")
+    import time
+
+    time.sleep(0.3)
+    assert done == [] and codex.account() is None
+
+
+@pytest.mark.parametrize("last, step", [(False, "Construire et tester"), (True, "Poursuivre en autonomie")])
+def test_demo_codex_writes_a_valid_report(last, step):
+    codex = DemoCodex()
+    prompt = report_content.build_prompt(
+        {"client": "Jean Démo", "seance_numero": 3, "derniere_seance": last}, ["Client : bonjour"]
+    )
+    with pytest.raises(CodexNotConnected):
+        codex.run_turn(instructions="", prompt=prompt, output_schema={})
+    codex.connected = True
+    output = report_content.parse_output(codex.run_turn(instructions="", prompt=prompt, output_schema={}))
+    assert output.synthese.prochaines_etapes[0].startswith(step)
+    assert "Séance n° 3 — Jean Démo" in output.image
+    assert report_content.render_png(output.image).startswith(b"\x89PNG")

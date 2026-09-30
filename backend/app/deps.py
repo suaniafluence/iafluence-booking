@@ -5,7 +5,9 @@ from functools import lru_cache
 
 from app.config import get_config
 from app.services.calendar_service import CalendarGateway, GoogleCalendarGateway
+from app.services.codex import CodexGateway, LiveCodex
 from app.services.email_service import GmailMailer, Mailer
+from app.services.fireflies import FirefliesGateway, LiveFireflies
 from app.services.stripe_service import LiveStripeGateway, StripeGateway
 
 
@@ -34,6 +36,24 @@ def get_stripe() -> StripeGateway:
 
         return DemoStripe()
     return LiveStripeGateway()
+
+
+@lru_cache
+def get_fireflies() -> FirefliesGateway:
+    if get_config().fake_integrations:
+        from app.dev_fakes import DemoFireflies
+
+        return DemoFireflies()
+    return LiveFireflies()
+
+
+@lru_cache
+def get_codex() -> CodexGateway:
+    if get_config().fake_integrations:
+        from app.dev_fakes import DemoCodex
+
+        return DemoCodex()
+    return LiveCodex()
 
 
 def get_now() -> datetime:
