@@ -7,7 +7,8 @@ Paiement Stripe → vérification → lien de réservation sécurisé → créne
 ```
 backend/    FastAPI · SQLAlchemy · Alembic · PostgreSQL
 frontend/   React · Vite · TypeScript · Tailwind
-deploy/     Docker Compose · Caddy (TLS auto) · .env.example
+deploy/     Docker Compose · Caddy (TLS auto) · .env.example · release.sh (déploiement / rollback)
+.github/    CI (tests) · Deploy Production (manuel)
 ```
 
 ## Fonctionnement
@@ -100,25 +101,46 @@ Sans `TEST_DATABASE_URL`, seuls les tests unitaires (moteur de créneaux, passer
 
 Tester d’abord en mode test : carte `4242 4242 4242 4242`, puis `stripe listen --forward-to localhost:8000/webhooks/stripe` en local.
 
-### 3. Serveur (VPS)
+### 3. Serveur (VPS) et déploiement continu
 
 DNS : un enregistrement `A booking.iafluence.fr` qui pointe vers l’IP du VPS. Ports 80 et 443 ouverts.
 
-```bash
-git clone … && cd iafluence-booking/deploy
-cp .env.example .env    # puis remplir
-docker compose up -d --build
+Le serveur ne reçoit ni le dépôt, ni Node, ni les outils de test. GitHub Actions exécute les tests, construit le frontend et envoie une archive minimale (sources backend sans tests, `frontend/dist`, fichiers de `deploy/`). Sur le serveur, Docker Compose construit l’image API avec les seules dépendances runtime, puis sert le frontend via l’image Caddy officielle.
+
+```
+/var/www/iafluence-booking/
+  releases/<release-id>/     une archive par déploiement (3 conservées)
+  current -> releases/<id>   release active
+  shared/.env                secrets de production (jamais dans le dépôt ni dans l’archive)
 ```
 
-Initialisation, une seule fois :
+**Déployer :** GitHub → *Actions* → *Deploy Production* → *Run workflow* (branche `main`). Les jobs `test` → `build` → `deploy` s’enchaînent seulement si le précédent réussit. `deploy/release.sh` construit l’image pendant que l’ancienne version tourne, bascule `current`, redémarre, puis vérifie `/api/health` et la page d’accueil via Caddy. En cas d’échec, il revient automatiquement à la release précédente. Les tests tournent aussi à chaque push sur `main` et à chaque pull request (`.github/workflows/ci.yml`).
+
+**Secrets GitHub** (*Settings → Secrets and variables → Actions*) : `PROD_HOST`, `PROD_USER`, `PROD_SSH_KEY` (clé privée dédiée), `PROD_SSH_KNOWN_HOSTS` (sortie de `ssh-keyscan -p PORT HOST`), `PROD_PORT` (facultatif, 22 par défaut). Variables facultatives : `PROD_URL` (`https://booking.iafluence.fr`, vérification publique après déploiement) et `PROD_APP_DIR` (`/var/www/iafluence-booking` par défaut).
+
+**Préparation du serveur (une fois) :** Docker Engine et son plugin compose, un utilisateur membre du groupe `docker` dont la clé publique est autorisée, `mkdir -p /var/www/iafluence-booking/{releases,shared}`, puis `shared/.env` rempli à partir de `deploy/.env.example` (`chmod 600`).
+
+**Revenir en arrière :**
 
 ```bash
-docker compose exec api python -m scripts.seed_settings \
+/var/www/iafluence-booking/current/deploy/release.sh rollback            # release précédente
+/var/www/iafluence-booking/current/deploy/release.sh rollback <id>       # release précise (voir releases/)
+```
+
+Les migrations Alembic s’exécutent au démarrage de l’API et ne sont pas annulées par un rollback.
+
+Initialisation, une seule fois (après le premier déploiement) :
+
+```bash
+R=/var/www/iafluence-booking/current/deploy/release.sh
+$R compose exec api python -m scripts.seed_settings \
   --admin-email contact@iafluence.fr \
   --booking-calendar "xxxx@group.calendar.google.com"
-docker compose exec api python -m scripts.list_calendars                       # lister les agendas visibles
-docker compose exec api python -m scripts.list_calendars --add "ID" "Formation"  # répéter pour chaque agenda
+$R compose exec api python -m scripts.list_calendars                       # lister les agendas visibles
+$R compose exec api python -m scripts.list_calendars --add "ID" "Formation"  # répéter pour chaque agenda
 ```
+
+`release.sh compose …` exécute `docker compose` sur la release active, avec le bon nom de projet. Pour lancer la pile à la main depuis un clone, construisez d’abord le frontend (`cd frontend && npm ci && npm run build`), puis `cd deploy && docker compose up -d --build`.
 
 Le calendrier des rendez-vous est toujours pris en compte dans les disponibilités. Inutile de l’ajouter comme source.
 
@@ -133,7 +155,7 @@ Placer la valeur entre apostrophes dans `ADMIN_PASSWORD_HASH='…'`.
 **Sauvegardes :**
 
 ```bash
-docker compose exec db pg_dump -U iafluence iafluence | gzip > backup-$(date +%F).sql.gz
+/var/www/iafluence-booking/current/deploy/release.sh compose exec -T db pg_dump -U iafluence iafluence | gzip > backup-$(date +%F).sql.gz
 ```
 
 À planifier en cron quotidien.
