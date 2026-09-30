@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models import Booking, BookingToken
+from app.models import Booking
 from app.services import notifications
 from app.services.email_service import Mailer
 
@@ -48,11 +48,7 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
             if purchase.hours_remaining < 1:
                 to_thank.append(purchase.id)
                 continue
-            token = db.scalar(
-                select(BookingToken.token)
-                .where(BookingToken.purchase_id == purchase.id, BookingToken.revoked_at.is_(None))
-                .order_by(BookingToken.id.desc())
-            )
+            token = notifications.active_token(db, purchase.id)
             if token is not None:
                 to_notify.append((purchase.id, token))
         db.commit()

@@ -69,6 +69,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify(client),
     }),
+  adminCancelBooking: (bookingId: number, notify: boolean) =>
+    request<{ status: string }>(`/api/admin/bookings/${bookingId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ notify }),
+    }),
+  adminSetHours: (purchaseId: number, hoursPurchased: number) =>
+    request<{ hours_purchased: number; hours_booked: number; hours_remaining: number }>(
+      `/api/admin/purchases/${purchaseId}`,
+      { method: "PATCH", body: JSON.stringify({ hours_purchased: hoursPurchased }) },
+    ),
   adminSetAutoSend: (customerId: number, autoSend: boolean) =>
     request<{ customer_id: number; auto_send_next_link: boolean }>(`/api/admin/customers/${customerId}`, {
       method: "PATCH",
@@ -95,7 +105,7 @@ export type AdminOverview = {
     hours_to_schedule: number;
     hours_to_deliver: number;
   };
-  upcoming: (BookingInfo & { customer: string; email: string; product: string })[];
+  upcoming: (BookingInfo & { booking_id: number; customer: string; email: string; product: string })[];
   clients: {
     purchase_id: number;
     customer_id: number;

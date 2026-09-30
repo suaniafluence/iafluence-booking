@@ -40,6 +40,7 @@ export const overview = (over: Partial<AdminOverview> = {}): AdminOverview => ({
   },
   upcoming: [
     {
+      booking_id: 21,
       customer: "Jean Dupont",
       email: "jean@example.com",
       product: "Conseil IA - 5h",
@@ -48,6 +49,7 @@ export const overview = (over: Partial<AdminOverview> = {}): AdminOverview => ({
       meet_url: "https://meet.google.com/abc",
     },
     {
+      booking_id: 22,
       customer: "Marie Martin",
       email: "marie@example.com",
       product: "Conseil IA - 2h",

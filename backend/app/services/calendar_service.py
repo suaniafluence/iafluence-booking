@@ -133,7 +133,12 @@ class GoogleCalendarGateway:
         return CreatedEvent(event_id=ev["id"], meet_url=meet_url)
 
     def delete_event(self, calendar_id: str, event_id: str) -> None:
-        self._api().events().delete(calendarId=calendar_id, eventId=event_id, sendUpdates="all").execute()
+        try:
+            self._api().events().delete(calendarId=calendar_id, eventId=event_id, sendUpdates="all").execute()
+        except Exception as exc:
+            if getattr(getattr(exc, "resp", None), "status", None) in (404, 410):
+                return  # already gone, e.g. deleted by hand in Google Calendar
+            raise CalendarWriteError(str(exc)) from exc
 
 
 class CachedFreeBusy:

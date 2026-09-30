@@ -28,7 +28,7 @@ test("l'administrateur se connecte, suit les clients et se déconnecte", async (
   await expect(row.getByRole("cell")).toHaveText([
     `${customerName(who)}${customerEmail(who)}`,
     "Conseil IA - 2h",
-    "2 h",
+    "2 hModifier",
     "1 h",
     "1 h",
     /^\p{Lu}\p{Ll}+ \d{1,2} \p{Ll}+ \d{4} · \d\d:\d\d$/u,
@@ -54,12 +54,21 @@ test("l'administrateur se connecte, suit les clients et se déconnecte", async (
   await expect(page.getByRole("alert")).toContainText("Client ajouté. Lien de réservation : http");
   const manualRow = page.getByRole("row").filter({ hasText: customerEmail(manual) });
   await expect(manualRow.getByRole("cell").nth(1)).toHaveText("Conseil IAmanuel");
-  await expect(manualRow.getByRole("cell").nth(2)).toHaveText("3 h");
+  await expect(manualRow.getByRole("cell").nth(2)).toHaveText("3 hModifier");
 
   // The session cookie survives a reload.
   await page.reload();
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await expect(autoSend).toBeChecked();
+
+  // Moving the session: cancelled from the admin, the hour goes back to the client.
+  await page.getByRole("button", { name: `Annuler la séance de ${customerName(who)}` }).click();
+  await page.getByRole("button", { name: "Confirmer l’annulation" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    `Séance de ${customerName(who)} annulée : l’heure lui a été recréditée et son lien lui a été renvoyé.`,
+  );
+  await expect(row.getByRole("cell").nth(3)).toHaveText("0 h");
+  await expect(page.getByRole("button", { name: `Annuler la séance de ${customerName(who)}` })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Déconnexion" }).click();
   await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();

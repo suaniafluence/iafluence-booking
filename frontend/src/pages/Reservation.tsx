@@ -4,6 +4,10 @@ import { api, ApiError, type BookingContext, type BookingInfo, type Slot } from 
 import { Alert, Button, Card, HoursSummary, Layout, Spinner } from "../components/Layout";
 import { dayKey, hm, hours, longDate, shortDay } from "../format";
 
+export const CANCELLATION_POLICY =
+  "Toute séance réservée est due. Vous pouvez la déplacer gratuitement jusqu’à 24 h avant son début en répondant à " +
+  "l’email de confirmation ; passé ce délai, ou en cas d’absence, l’heure est considérée comme consommée.";
+
 type Step =
   | { kind: "welcome" }
   | { kind: "pick"; notice?: string }
@@ -298,6 +302,7 @@ function Confirm({
       <p className="mt-4 text-sm text-slate-500">
         L’invitation et le lien de visioconférence seront envoyés à <strong>{ctx.customer.email}</strong>.
       </p>
+      <p className="mt-2 text-sm text-slate-500">{CANCELLATION_POLICY}</p>
       {error && (
         <div className="mt-4">
           <Alert>{error}</Alert>
@@ -362,6 +367,7 @@ function Done({
           ]}
         />
       </div>
+      <p className="mt-4 text-sm text-slate-500">{CANCELLATION_POLICY}</p>
       {hoursRemaining > 0 && (
         <p className="mt-4 text-sm text-slate-500">
           Un lien pour réserver la séance suivante vous sera envoyé par email après cette session.

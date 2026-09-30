@@ -48,7 +48,8 @@ deploy/     Docker Compose · Caddy (derrière le nginx du serveur) · .env.exam
 | Google Calendar | Événement « Conseil IA - Nom » dans le calendrier dédié, avec le client en invité (`sendUpdates=all` : Google envoie l’invitation à n’importe quelle adresse) et un lien Meet optionnel. |
 | Séances suivantes | Chaque minute, l’API clôt les sessions terminées (`confirmed` → `completed`), ce qui libère l’achat pour la réservation suivante. S’il reste des heures, l’email « Réservez votre prochaine session » (même lien) est **mis en brouillon dans Gmail** — pour y ajouter le compte rendu avant de l’envoyer — ou **envoyé directement** si « Envoi auto » est coché pour ce client dans l’admin. Après la dernière heure, même règle pour l’email « Merci pour votre accompagnement », qui renvoie vers `SHOP_URL` (https://iafluence.fr par défaut) pour racheter des heures. Rien pour un achat remboursé ; une session terminée depuis plus de 24 h (API arrêtée, premier déploiement) est clôturée sans email. |
 | Emails | Envoyés via l’API Gmail : lien de réservation, confirmation client, lien de la session suivante ou remerciement après la dernière heure (brouillon ou envoi), notification « NOUVELLE RÉSERVATION », alerte remboursement. |
-| Admin | `/admin` (mot de passe unique) : indicateurs du mois, heures vendues/réalisées/restantes, prochains rendez-vous, liste des clients avec la case « Envoi auto » et le lien de réservation à copier, **ajout d’un client à la main** (payé hors du site : nom, email, heures, montant, envoi ou non du lien). |
+| Admin | `/admin` (mot de passe unique) : indicateurs du mois, heures vendues/réalisées/restantes, prochains rendez-vous, liste des clients avec la case « Envoi auto » et le lien de réservation à copier, **ajout d’un client à la main** (payé hors du site : nom, email, heures, montant, envoi ou non du lien), **annulation d’une séance à venir** (déplacement : l’événement Google est supprimé, l’heure recréditée et le lien renvoyé au client si coché) et **modification des heures achetées** (remboursement partiel, heures supplémentaires ; jamais sous les heures déjà réservées). |
+| Annulations | Règle affichée au client (page de réservation et email de confirmation) : toute séance réservée est due ; déplacement gratuit jusqu’à 24 h avant en répondant à l’email de confirmation ; au-delà, ou en cas d’absence, l’heure est consommée. Un remboursement ne se fait que dans Stripe : total → lien révoqué et alerte admin ; partiel → accès conservé, ajuster les heures dans l’admin. |
 
 ## Démarrage local (démo sans Google ni Stripe)
 
@@ -280,7 +281,9 @@ UPDATE settings SET buffer_before_min = 15, buffer_after_min = 15, minimum_notic
 | POST/GET | `/api/admin/login`, `/api/admin/overview` | Administration |
 | POST | `/api/admin/clients` `{name, email, hours, product_name, amount_cents, send_link}` | Ajoute un client payé hors du site, renvoie `{purchase_id, booking_url}` |
 | PATCH | `/api/admin/customers/{id}` `{auto_send_next_link}` | Lien de la session suivante : envoi automatique ou brouillon |
+| POST | `/api/admin/bookings/{id}/cancel` `{notify}` | Annule une séance à venir, recrédite l’heure. 409 `not_cancellable` ; 502 `calendar_delete_failed` (rien n’est modifié) |
+| PATCH | `/api/admin/purchases/{id}` `{hours_purchased}` | Ajuste les heures d’un achat (422 si inférieur aux heures réservées) |
 
 ## Hors MVP (évolutions prévues)
 
-Modification ou annulation de rendez-vous, rappels, portail client, interface d’édition des réglages.
+Déplacement d’un rendez-vous par le client lui-même, rappels, portail client, interface d’édition des réglages.

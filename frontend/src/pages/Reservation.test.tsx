@@ -4,7 +4,7 @@ import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "../api";
 import { confirmed, context, deferred, slots } from "../test/fixtures";
-import Reservation from "./Reservation";
+import Reservation, { CANCELLATION_POLICY } from "./Reservation";
 
 function renderAt(token = "tok123") {
   return render(
@@ -180,6 +180,7 @@ describe("Reservation", () => {
     expect(screen.getByText("09:00 - 10:00")).toBeInTheDocument();
     expect(screen.getByText("Conseil IA avec Suan Tay")).toBeInTheDocument();
     expect(screen.getByText("jean@example.com")).toBeInTheDocument();
+    expect(screen.getByText(CANCELLATION_POLICY)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Confirmer le rendez-vous" }));
     expect(api.book).toHaveBeenCalledWith("tok123", "2026-10-09T09:00:00+02:00");
@@ -196,6 +197,11 @@ describe("Reservation", () => {
     expect(
       screen.getByText("Un lien pour réserver la séance suivante vous sera envoyé par email après cette session."),
     ).toBeInTheDocument();
+    expect(screen.getByText(CANCELLATION_POLICY)).toBeInTheDocument();
+    expect(CANCELLATION_POLICY).toBe(
+      "Toute séance réservée est due. Vous pouvez la déplacer gratuitement jusqu’à 24 h avant son début en répondant " +
+        "à l’email de confirmation ; passé ce délai, ou en cas d’absence, l’heure est considérée comme consommée.",
+    );
   });
 
   it("goes back to the picker without booking", async () => {

@@ -78,3 +78,11 @@ class ManualClientOut(BaseModel):
 
 class CustomerPatchIn(BaseModel):
     auto_send_next_link: bool
+
+
+class CancelBookingIn(BaseModel):
+    notify: bool = True
+
+
+class PurchaseHoursIn(BaseModel):
+    hours_purchased: int = Field(ge=0, le=100)

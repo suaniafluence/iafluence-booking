@@ -11,10 +11,17 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_config
 from app.db import get_db
-from app.deps import get_mailer, get_now
+from app.deps import get_calendar, get_mailer, get_now
 from app.models import Booking, BookingToken, Customer, Purchase
-from app.schemas import CustomerPatchIn, LoginIn, ManualClientIn, ManualClientOut
-from app.services import manual_purchase, notifications
+from app.schemas import (
+    CancelBookingIn,
+    CustomerPatchIn,
+    LoginIn,
+    ManualClientIn,
+    ManualClientOut,
+    PurchaseHoursIn,
+)
+from app.services import booking_service, manual_purchase, notifications
 from app.services.settings_service import get_settings
 
 router = APIRouter(prefix="/api/admin")
@@ -129,7 +136,13 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
             "hours_to_deliver": int(hours_sold) - hours_done,
         },
         "upcoming": [
-            {"customer": b.customer.name, "email": b.customer.email, "product": b.purchase.product_name, **booking_dict(b)}
+            {
+                "booking_id": b.id,
+                "customer": b.customer.name,
+                "email": b.customer.email,
+                "product": b.purchase.product_name,
+                **booking_dict(b),
+            }
             for b in upcoming
         ],
         "clients": [
@@ -183,3 +196,36 @@ def update_customer(customer_id: int, body: CustomerPatchIn, db: Session = Depen
     customer.auto_send_next_link = body.auto_send_next_link
     db.commit()
     return {"customer_id": customer.id, "auto_send_next_link": customer.auto_send_next_link}
+
+
+@router.post("/bookings/{booking_id}/cancel", dependencies=[Depends(require_admin)])
+def cancel_booking(
+    booking_id: int,
+    body: CancelBookingIn,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    calendar=Depends(get_calendar),
+    mailer=Depends(get_mailer),
+    now: datetime = Depends(get_now),
+):
+    """Session moved or cancelled: the Google event is deleted and the hour goes back to the client."""
+    booking = booking_service.cancel(db, calendar, booking_id, now)
+    if body.notify:
+        background.add_task(notifications.send_booking_cancelled, mailer, booking.id)
+    return {"status": "cancelled", **booking_service.hours_summary(booking.purchase)}
+
+
+@router.patch("/purchases/{purchase_id}", dependencies=[Depends(require_admin)])
+def update_purchase_hours(purchase_id: int, body: PurchaseHoursIn, db: Session = Depends(get_db)):
+    """Adjust the hours of a purchase (partial refund, extra hours paid outside the website)."""
+    purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id).with_for_update())
+    if purchase is None:
+        raise HTTPException(404, "Achat introuvable.")
+    if body.hours_purchased < purchase.hours_booked:
+        db.rollback()
+        raise HTTPException(
+            422, f"Impossible : {purchase.hours_booked} h sont déjà réservées ou réalisées pour ce client."
+        )
+    purchase.hours_purchased = body.hours_purchased
+    db.commit()
+    return booking_service.hours_summary(purchase)

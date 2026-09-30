@@ -2,9 +2,12 @@
 
 import logging
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.config import get_config
 from app.db import SessionLocal
-from app.models import Booking, Purchase
+from app.models import Booking, BookingToken, Purchase
 from app.services import formatting as fmt
 from app.services.email_service import Mailer, render, send_safely
 from app.services.settings_service import get_settings
@@ -14,6 +17,35 @@ log = logging.getLogger(__name__)
 
 def booking_url(token: str) -> str:
     return f"{get_config().public_base_url.rstrip('/')}/reservation/{token}"
+
+
+def active_token(db: Session, purchase_id: int) -> str | None:
+    """Newest non-revoked booking token of a purchase."""
+    return db.scalar(
+        select(BookingToken.token)
+        .where(BookingToken.purchase_id == purchase_id, BookingToken.revoked_at.is_(None))
+        .order_by(BookingToken.id.desc())
+    )
+
+
+def send_booking_cancelled(mailer: Mailer, booking_id: int) -> None:
+    """Admin cancelled a session: the hour is back, send the link to pick another slot."""
+    with SessionLocal() as db:
+        booking = db.get(Booking, booking_id)
+        token = active_token(db, booking.purchase_id)
+        if token is None:
+            log.info("booking %s cancelled: no active link, client not emailed", booking_id)
+            return
+        settings = get_settings(db)
+        body = render(
+            "booking_cancelled.txt",
+            name=booking.customer.name,
+            date_long=fmt.long_date(booking.start_datetime, settings.timezone),
+            hour_range=fmt.hour_range(booking.start_datetime, booking.end_datetime, settings.timezone, "h"),
+            booking_url=booking_url(token),
+            consultant_name=settings.consultant_name,
+        )
+        send_safely(mailer, booking.customer.email, "Votre session de conseil IA a été annulée", body)
 
 
 def send_booking_link(mailer: Mailer, purchase_id: int, token: str) -> None:

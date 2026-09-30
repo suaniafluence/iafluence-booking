@@ -52,7 +52,7 @@ describe("Admin", () => {
     expect(cells(rows[1])).toEqual([
       "Jean Dupontjean@example.com",
       "Conseil IA - 5h",
-      "5 h",
+      "5 hModifier",
       "1 h",
       "4 h",
       "Jeudi 8 octobre 2026 · 14:00",
@@ -279,6 +279,106 @@ describe("Admin", () => {
     await user.click(screen.getByRole("button", { name: "Annuler" }));
     expect(screen.queryByLabelText("Nom")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ajouter un client" })).toBeInTheDocument();
+    expect(api.adminOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels a session after confirmation, giving the hour back and notifying the client", async () => {
+    const cancel = deferred<{ status: string }>();
+    vi.spyOn(api, "adminCancelBooking").mockReturnValue(cancel.promise);
+    const user = userEvent.setup();
+    render(<Admin />);
+    await user.click(await screen.findByRole("button", { name: "Annuler la séance de Jean Dupont" }));
+    expect(api.adminCancelBooking).not.toHaveBeenCalled();
+    expect(screen.getByText(/l’heure est recréditée au client/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Annuler la séance de Jean Dupont" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Annuler la séance de Marie Martin" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Envoyer au client son lien pour choisir un autre créneau")).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Confirmer l’annulation" }));
+    expect(api.adminCancelBooking).toHaveBeenCalledWith(21, true);
+    expect(screen.getByRole("button", { name: "Annulation…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Garder la séance" })).toBeDisabled();
+
+    cancel.resolve({ status: "cancelled" });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Séance de Jean Dupont annulée : l’heure lui a été recréditée et son lien lui a été renvoyé.",
+    );
+    expect(screen.queryByRole("button", { name: "Confirmer l’annulation" })).not.toBeInTheDocument();
+    expect(api.adminOverview).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels without emailing the client when unticked", async () => {
+    vi.spyOn(api, "adminCancelBooking").mockResolvedValue({ status: "cancelled" });
+    const user = userEvent.setup();
+    render(<Admin />);
+    await user.click(await screen.findByRole("button", { name: "Annuler la séance de Marie Martin" }));
+    await user.click(screen.getByLabelText("Envoyer au client son lien pour choisir un autre créneau"));
+    await user.click(screen.getByRole("button", { name: "Confirmer l’annulation" }));
+    expect(api.adminCancelBooking).toHaveBeenCalledWith(22, false);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /^Séance de Marie Martin annulée : l’heure lui a été recréditée\.$/,
+    );
+
+    // Reopening resets the choice to "notify".
+    await user.click(screen.getByRole("button", { name: "Annuler la séance de Jean Dupont" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Envoyer au client son lien pour choisir un autre créneau")).toBeChecked();
+  });
+
+  it("keeps the session when the admin changes their mind or the cancellation fails", async () => {
+    vi.spyOn(api, "adminCancelBooking").mockRejectedValue(new ApiError(502, "Rien n’a été annulé : réessayez."));
+    const user = userEvent.setup();
+    render(<Admin />);
+    await user.click(await screen.findByRole("button", { name: "Annuler la séance de Jean Dupont" }));
+    await user.click(screen.getByRole("button", { name: "Confirmer l’annulation" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Rien n’a été annulé : réessayez.");
+    expect(screen.getByRole("button", { name: "Confirmer l’annulation" })).toBeEnabled();
+    expect(api.adminOverview).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Garder la séance" }));
+    expect(screen.queryByText(/l’heure est recréditée au client/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Annuler la séance de Jean Dupont" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Annuler la séance de Jean Dupont" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument(); // previous error cleared
+  });
+
+  it("adjusts the hours of a purchase", async () => {
+    const saved = deferred<{ hours_purchased: number; hours_booked: number; hours_remaining: number }>();
+    vi.spyOn(api, "adminSetHours").mockReturnValue(saved.promise);
+    const user = userEvent.setup();
+    render(<Admin />);
+    await user.click(await screen.findByRole("button", { name: "Modifier les heures de Jean Dupont" }));
+    const input = screen.getByLabelText("Heures achetées par Jean Dupont");
+    expect(input).toHaveValue(5);
+    expect(input).toHaveAttribute("min", "1");
+    expect(input).toHaveAttribute("max", "100");
+    expect(screen.getByRole("button", { name: "Modifier les heures de Paul Rembourse" })).toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, "2");
+    await user.click(screen.getByRole("button", { name: "OK" }));
+    expect(api.adminSetHours).toHaveBeenCalledWith(1, 2);
+
+    saved.resolve({ hours_purchased: 2, hours_booked: 1, hours_remaining: 1 });
+    await vi.waitFor(() => expect(api.adminOverview).toHaveBeenCalledTimes(2));
+    expect(screen.queryByLabelText("Heures achetées par Jean Dupont")).not.toBeInTheDocument();
+  });
+
+  it("shows why hours could not be changed and lets the admin give up", async () => {
+    vi.spyOn(api, "adminSetHours").mockRejectedValue(
+      new ApiError(422, "Impossible : 1 h sont déjà réservées ou réalisées pour ce client."),
+    );
+    const user = userEvent.setup();
+    render(<Admin />);
+    await user.click(await screen.findByRole("button", { name: "Modifier les heures de Jean Dupont" }));
+    await user.click(screen.getByRole("button", { name: "OK" }));
+    expect(api.adminSetHours).toHaveBeenCalledWith(1, 5);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Impossible : 1 h sont déjà réservées");
+    expect(screen.getByLabelText("Heures achetées par Jean Dupont")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Annuler la modification" }));
+    expect(screen.queryByLabelText("Heures achetées par Jean Dupont")).not.toBeInTheDocument();
     expect(api.adminOverview).toHaveBeenCalledTimes(1);
   });
 });

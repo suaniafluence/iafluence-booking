@@ -1,0 +1,12 @@
+Bonjour {{ name }},
+
+Votre session de conseil IA du {{ date_long }} ({{ hour_range }}) a été annulée. L'heure correspondante vous a été recréditée.
+
+Vous pouvez choisir un nouveau créneau ici :
+
+{{ booking_url }}
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence

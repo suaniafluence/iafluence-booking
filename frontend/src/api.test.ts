@@ -54,6 +54,16 @@ describe("api", () => {
       "/api/admin/clients",
       expect.objectContaining({ method: "POST", body: JSON.stringify(client) }),
     );
+    await api.adminCancelBooking(21, false);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/bookings/21/cancel",
+      expect.objectContaining({ method: "POST", body: '{"notify":false}' }),
+    );
+    await api.adminSetHours(3, 2);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/purchases/3",
+      expect.objectContaining({ method: "PATCH", body: '{"hours_purchased":2}' }),
+    );
     await api.adminSetAutoSend(7, true);
     expect(fetch).toHaveBeenLastCalledWith(
       "/api/admin/customers/7",

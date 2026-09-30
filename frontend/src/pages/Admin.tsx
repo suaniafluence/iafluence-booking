@@ -117,37 +117,7 @@ function Dashboard({ data, onChange }: { data: AdminOverview; onChange: () => vo
         <Kpi label="Heures à planifier" value={hours(k.hours_to_schedule)} hint={`${hours(k.hours_booked)} réservées`} />
       </div>
 
-      <section>
-        <h2 className="text-lg font-semibold text-slate-900">Prochains rendez-vous</h2>
-        {data.upcoming.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">Aucun rendez-vous à venir.</p>
-        ) : (
-          <ul className="mt-3 divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">
-            {data.upcoming.map((b) => (
-              <li key={b.start} className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 text-sm">
-                <div>
-                  <div className="font-medium text-slate-900">{b.customer}</div>
-                  <div className="text-slate-500">{b.email}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-slate-900">{longDate(b.start)}</div>
-                  <div className="text-slate-500">
-                    {hm(b.start)} - {hm(b.end)}
-                    {b.meet_url && (
-                      <>
-                        {" · "}
-                        <a className="text-brand-600 underline" href={b.meet_url} target="_blank" rel="noreferrer">
-                          Meet
-                        </a>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <Upcoming upcoming={data.upcoming} onChange={onChange} />
 
       <Clients clients={data.clients} onChange={onChange} />
     </div>
@@ -163,6 +133,20 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
   const [saving, setSaving] = useState<number | null>(null);
   // Shown at once, before the reloaded overview confirms it; dropped again if saving fails.
   const [autoSendShown, setAutoSendShown] = useState<Record<number, boolean>>({});
+  const [editing, setEditing] = useState<{ purchaseId: number; value: string } | null>(null);
+
+  const saveHours = async (e: FormEvent) => {
+    e.preventDefault();
+    const { purchaseId, value } = editing!;
+    setError(null);
+    try {
+      await api.adminSetHours(purchaseId, Number(value));
+      setEditing(null);
+      onChange();
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  };
 
   const setAutoSend = async (c: ClientRow, autoSend: boolean) => {
     setSaving(c.customer_id);
@@ -243,7 +227,45 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
                     <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">manuel</span>
                   )}
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">{hours(c.hours_purchased)}</td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {editing?.purchaseId === c.purchase_id ? (
+                    <form onSubmit={saveHours} className="flex items-center justify-end gap-2">
+                      <input
+                        type="number"
+                        aria-label={`Heures achetées par ${c.name}`}
+                        min={c.hours_booked}
+                        max={100}
+                        value={editing.value}
+                        onChange={(e) => setEditing({ purchaseId: c.purchase_id, value: e.target.value })}
+                        className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-right"
+                        required
+                      />
+                      <button type="submit" className="font-medium text-brand-600 underline">
+                        OK
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Annuler la modification"
+                        className="text-slate-500 underline"
+                        onClick={() => setEditing(null)}
+                      >
+                        ✕
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      {hours(c.hours_purchased)}
+                      <button
+                        type="button"
+                        aria-label={`Modifier les heures de ${c.name}`}
+                        className="ml-2 text-xs text-brand-600 underline"
+                        onClick={() => setEditing({ purchaseId: c.purchase_id, value: String(c.hours_purchased) })}
+                      >
+                        Modifier
+                      </button>
+                    </>
+                  )}
+                </td>
                 <td className="px-5 py-3 text-right tabular-nums">{hours(c.hours_booked)}</td>
                 <td className="px-5 py-3 text-right font-semibold tabular-nums">{hours(c.hours_remaining)}</td>
                 <td className="px-5 py-3 text-slate-600">
@@ -366,5 +388,118 @@ function AddClient({ onCancel, onAdded }: { onCancel: () => void; onAdded: (book
         </Button>
       </div>
     </form>
+  );
+}
+
+type UpcomingRow = AdminOverview["upcoming"][number];
+
+function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: () => void }) {
+  const [cancelling, setCancelling] = useState<number | null>(null);
+  const [notify, setNotify] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  const open = (b: UpcomingRow) => {
+    setCancelling(b.booking_id);
+    setNotify(true);
+    setError(null);
+    setDone(null);
+  };
+
+  const confirm = async (b: UpcomingRow) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.adminCancelBooking(b.booking_id, notify);
+      setCancelling(null);
+      setDone(
+        `Séance de ${b.customer} annulée : l’heure lui a été recréditée${notify ? " et son lien lui a été renvoyé" : ""}.`,
+      );
+      onChange();
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <h2 className="text-lg font-semibold text-slate-900">Prochains rendez-vous</h2>
+      {done && (
+        <div className="mt-3">
+          <Alert tone="info">{done}</Alert>
+        </div>
+      )}
+      {upcoming.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-500">Aucun rendez-vous à venir.</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">
+          {upcoming.map((b) => (
+            <li key={b.booking_id} className="px-5 py-4 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="font-medium text-slate-900">{b.customer}</div>
+                  <div className="text-slate-500">{b.email}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-slate-900">{longDate(b.start)}</div>
+                  <div className="text-slate-500">
+                    {hm(b.start)} - {hm(b.end)}
+                    {b.meet_url && (
+                      <>
+                        {" · "}
+                        <a className="text-brand-600 underline" href={b.meet_url} target="_blank" rel="noreferrer">
+                          Meet
+                        </a>
+                      </>
+                    )}
+                    {cancelling !== b.booking_id && (
+                      <>
+                        {" · "}
+                        <button
+                          type="button"
+                          aria-label={`Annuler la séance de ${b.customer}`}
+                          className="text-red-700 underline"
+                          onClick={() => open(b)}
+                        >
+                          Annuler
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {cancelling === b.booking_id && (
+                <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-4">
+                  <p className="text-slate-700">
+                    Annuler cette séance ? L’événement Google Agenda est supprimé et l’heure est recréditée au client.
+                  </p>
+                  <label className="flex items-center gap-2 text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={notify}
+                      onChange={(e) => setNotify(e.target.checked)}
+                      className="h-4 w-4 accent-brand-600"
+                    />
+                    Envoyer au client son lien pour choisir un autre créneau
+                  </label>
+                  {error && <Alert>{error}</Alert>}
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                    <Button variant="secondary" onClick={() => setCancelling(null)} disabled={busy}>
+                      Garder la séance
+                    </Button>
+                    <Button onClick={() => confirm(b)} disabled={busy}>
+                      {busy ? "Annulation…" : "Confirmer l’annulation"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

@@ -273,7 +273,7 @@ def test_admin_overview_kpis_and_lists(client, fakes, token_for):
         "hours_to_deliver": 6.5,
     }
     assert data["upcoming"] == [
-        {"customer": "Jean Dupont", "email": "jean@example.com", "product": "Conseil IA - 5h",
+        {"booking_id": 1, "customer": "Jean Dupont", "email": "jean@example.com", "product": "Conseil IA - 5h",
          "start": "2026-10-08T14:00:00+02:00", "end": "2026-10-08T15:00:00+02:00", "meet_url": "https://meet.google.com/abc-defg-hij"}
     ]
     clients = {c["name"]: c for c in data["clients"]}
@@ -530,6 +530,8 @@ def test_booking_emails_full_content(client, fakes, token_for):
         "Vous avez acheté :\n3 heures de conseil\n\n"
         "Après cette première session :\n2 heures resteront à programmer.\n"
         "Un lien pour réserver la séance suivante vous sera envoyé par email après cette session.\n\n"
+        "Toute séance réservée est due. Vous pouvez la déplacer gratuitement jusqu'à 24 h avant son début en "
+        "répondant à cet email ; passé ce délai, ou en cas d'absence, l'heure est considérée comme consommée.\n\n"
         "Une invitation calendrier vous a également été envoyée.\n\nÀ bientôt,\n\nSuan Tay\nIAfluence\n"
     )
     admin = mails["NOUVELLE RÉSERVATION — Conseil IA"]
@@ -551,5 +553,5 @@ def test_refund_alert_full_content(client, fakes, token_for):
         "Un remboursement Stripe a été reçu.\n\nClient :\nMarie Martin <marie@example.com>\n\n"
         "Prestation :\nConseil IA - 5h\n\nPaiement :\npi_test_1\n\nLe lien de réservation a été révoqué.\n"
         "ATTENTION : un rendez-vous est déjà planifié le 08/10/2026 14:00 - 15:00.\n"
-        "Il n'a pas été annulé automatiquement — à traiter manuellement.\n"
+        "Il n'a pas été annulé automatiquement : annulez-le depuis l'admin (Prochains rendez-vous → Annuler).\n"
     )

@@ -241,6 +241,48 @@ def book(db: Session, calendar: CalendarGateway, token: str, start: datetime, no
     return booking
 
 
+class BookingNotFound(BookingError):
+    status_code, code, message = 404, "booking_not_found", "Séance introuvable."
+
+
+class NotCancellable(BookingError):
+    status_code, code, message = 409, "not_cancellable", "Seule une séance à venir ou en cours peut être annulée."
+
+
+class CalendarDeleteFailed(BookingError):
+    status_code, code, message = (
+        502,
+        "calendar_delete_failed",
+        "L’événement n’a pas pu être supprimé de Google Agenda. Rien n’a été annulé : réessayez.",
+    )
+
+
+def cancel(db: Session, calendar: CalendarGateway, booking_id: int, now: datetime) -> Booking:
+    """Admin cancellation (moved or cancelled session): remove the event and give the hour back."""
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": BOOKING_LOCK_KEY})
+    booking = db.scalar(select(Booking).where(Booking.id == booking_id).with_for_update())
+    if booking is None:
+        db.rollback()
+        raise BookingNotFound()
+    if booking.status != "confirmed" or booking.end_datetime <= now:
+        db.rollback()
+        raise NotCancellable()
+    if booking.google_event_id:
+        try:
+            calendar.delete_event(settings_service.get_settings(db).booking_calendar_id, booking.google_event_id)
+        except CalendarWriteError:
+            db.rollback()
+            log.exception("could not delete event %s", booking.google_event_id)
+            raise CalendarDeleteFailed()
+    booking.status = "cancelled"
+    booking.purchase.hours_booked = Purchase.hours_booked - 1
+    db.commit()
+    freebusy_cache.clear()
+    db.refresh(booking)
+    log.info("booking %s cancelled by admin", booking.id)
+    return booking
+
+
 def _compensate(calendar: CalendarGateway, calendar_id: str, event_id: str) -> None:
     try:
         calendar.delete_event(calendar_id, event_id)
