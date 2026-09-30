@@ -290,7 +290,7 @@ Facultatif : sans ces réglages, l’email de fin de séance reste celui de la V
 4. **L’agent** : ses consignes sont `backend/app/codex_agent/*.md` (concaténés par ordre alphabétique). Vous pouvez les réécrire avec Claude ou ChatGPT et en ajouter ; seul le format de sortie (dernière section d’`AGENTS.md`) doit rester identique. Un changement est pris en compte au déploiement suivant.
 5. **Vérifier** : terminer une séance de test enregistrée par Fireflies ; en 5 à 15 min, l’admin affiche « Brouillon créé avec compte rendu » et le brouillon apparaît dans Gmail.
 
-> ⚠️ **Conditions d’utilisation OpenAI** : un usage automatisé, côté serveur, de Codex avec un forfait ChatGPT (et non une clé API) doit être autorisé par les conditions en vigueur de votre forfait. À vérifier avant la mise en production ; sinon, repasser à une clé API OpenAI côté `codex app-server` (l’application n’a pas à changer).
+> ⚠️ **Conditions d’utilisation OpenAI** : un usage automatisé, côté serveur, de Codex avec un forfait ChatGPT (et non une clé API) doit être autorisé par les conditions en vigueur de votre forfait. À vérifier avant la mise en production ; sinon, passer à une clé API OpenAI côté `codex app-server` (petite adaptation : l’application n’accepte aujourd’hui qu’un compte ChatGPT).
 
 Paramètres facultatifs : `FIREFLIES_MAX_WAIT_HOURS` (6), `CODEX_MODEL` (vide = modèle par défaut du forfait), `CODEX_TURN_TIMEOUT_SECONDS` (600), `REPORT_RETENTION_DAYS` (90 ; 0 = conservés). Mettez à jour votre registre des traitements RGPD : Fireflies et OpenAI traitent le contenu des séances.
 
