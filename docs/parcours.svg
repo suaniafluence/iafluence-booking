@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="1050" viewBox="0 0 680 1050" role="img">
+<title>Parcours d'un achat et points de décision</title>
+<desc>De l'achat Stripe ou de l'ajout manuel jusqu'à la réservation, la clôture de séance et l'email suivant, avec les vérifications et les choix à chaque étape.</desc>
+<style>
+text{font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
+.bg{fill:#FFFFFF}
+.th{font-size:14px;font-weight:600;fill:#2C2C2A}
+.ts{font-size:12px;fill:#5F5E5A}
+.arr{stroke:#888780;stroke-width:1.5;fill:none}
+.dash{stroke-dasharray:4 3}
+.mk{stroke:#888780}
+.leader{stroke:#888780;stroke-width:1;stroke-dasharray:3 3}
+.box{fill:#FFFFFF;stroke:#B4B2A9;stroke-width:.5}
+.c-gray>rect,rect.c-gray{fill:#F1EFE8;stroke:#5F5E5A;stroke-width:.5}
+.c-gray>.th{fill:#444441}.c-gray>.ts{fill:#5F5E5A}
+.c-purple>rect,rect.c-purple{fill:#EEEDFE;stroke:#534AB7;stroke-width:.5}
+.c-purple>.th{fill:#3C3489}.c-purple>.ts{fill:#534AB7}
+.c-teal>rect,rect.c-teal{fill:#E1F5EE;stroke:#0F6E56;stroke-width:.5}
+.c-teal>.th{fill:#085041}.c-teal>.ts{fill:#0F6E56}
+@media (prefers-color-scheme:dark){
+.bg{fill:#1F1E1D}
+.th{fill:#F1EFE8}.ts{fill:#B4B2A9}
+.box{fill:#2C2C2A;stroke:#888780}
+.c-gray>rect,rect.c-gray{fill:#444441;stroke:#B4B2A9}
+.c-gray>.th{fill:#D3D1C7}.c-gray>.ts{fill:#B4B2A9}
+.c-purple>rect,rect.c-purple{fill:#3C3489;stroke:#AFA9EC}
+.c-purple>.th{fill:#CECBF6}.c-purple>.ts{fill:#AFA9EC}
+.c-teal>rect,rect.c-teal{fill:#085041;stroke:#5DCAA5}
+.c-teal>.th{fill:#9FE1CB}.c-teal>.ts{fill:#5DCAA5}
+}
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk" d="M2 1L8 5L2 9" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect class="bg" width="680" height="1050" rx="8"/>
+<g class="c-gray"><rect x="180" y="40" width="240" height="52" rx="4"/><text class="th" x="300" y="62" text-anchor="middle">Achat sur Stripe</text><text class="ts" x="300" y="80" text-anchor="middle">Payment Link 1, 2, 3 ou 5 h</text></g>
+<g class="c-gray"><rect x="470" y="40" width="170" height="52" rx="4"/><text class="th" x="555" y="62" text-anchor="middle">Ajout manuel</text><text class="ts" x="555" y="80" text-anchor="middle">admin, payé hors site</text></g>
+<line class="arr" x1="300" y1="92" x2="300" y2="128" marker-end="url(#arrow)"/>
+<g class="c-purple"><rect x="180" y="130" width="240" height="52" rx="4"/><text class="th" x="300" y="152" text-anchor="middle">Paiement vérifié ?</text><text class="ts" x="300" y="170" text-anchor="middle">redirection + webhook</text></g>
+<g class="c-gray"><rect x="40" y="130" width="110" height="52" rx="4"/><text class="th" x="95" y="152" text-anchor="middle">Refusé</text><text class="ts" x="95" y="170" text-anchor="middle">aucun lien</text></g>
+<line class="arr" x1="180" y1="156" x2="152" y2="156" marker-end="url(#arrow)"/>
+<text class="ts" x="166" y="148" text-anchor="middle">non</text>
+<line class="arr" x1="300" y1="182" x2="300" y2="218" marker-end="url(#arrow)"/>
+<text class="ts" x="308" y="204">oui</text>
+<path class="arr" d="M555 92 L555 246 L422 246" marker-end="url(#arrow)"/>
+<g class="c-teal"><rect x="180" y="220" width="240" height="52" rx="4"/><text class="th" x="300" y="242" text-anchor="middle">Achat + lien sécurisé</text><text class="ts" x="300" y="260" text-anchor="middle">token 256 bits, envoyé par email</text></g>
+<line class="arr" x1="300" y1="272" x2="300" y2="308" marker-end="url(#arrow)"/>
+<g class="c-gray"><rect x="180" y="310" width="240" height="52" rx="4"/><text class="th" x="300" y="332" text-anchor="middle">Page de réservation</text><text class="ts" x="300" y="350" text-anchor="middle">créneaux libres, free/busy</text></g>
+<line class="leader" x1="420" y1="326" x2="470" y2="326"/>
+<rect class="box" x="470" y="310" width="170" height="64" rx="4"/>
+<text class="th" x="555" y="332" text-anchor="middle">Règles</text>
+<text class="ts" x="555" y="350" text-anchor="middle">préavis 24 h, 30 jours</text>
+<text class="ts" x="555" y="366" text-anchor="middle">tampons 15 min, Paris</text>
+<line class="arr" x1="300" y1="362" x2="300" y2="398" marker-end="url(#arrow)"/>
+<g class="c-purple"><rect x="180" y="400" width="240" height="52" rx="4"/><text class="th" x="300" y="422" text-anchor="middle">Créneau encore libre ?</text><text class="ts" x="300" y="440" text-anchor="middle">verrou + free/busy frais</text></g>
+<path class="arr" d="M420 426 L448 426 L448 350 L422 350" marker-end="url(#arrow)"/>
+<text class="ts" x="434" y="419" text-anchor="middle">non</text>
+<line class="arr" x1="300" y1="452" x2="300" y2="488" marker-end="url(#arrow)"/>
+<text class="ts" x="308" y="474">oui</text>
+<g class="c-teal"><rect x="180" y="490" width="240" height="52" rx="4"/><text class="th" x="300" y="512" text-anchor="middle">Séance réservée</text><text class="ts" x="300" y="530" text-anchor="middle">Agenda + Meet + emails</text></g>
+<line class="arr" x1="300" y1="542" x2="300" y2="578" marker-end="url(#arrow)"/>
+<g class="c-gray"><rect x="180" y="580" width="240" height="52" rx="4"/><text class="th" x="300" y="602" text-anchor="middle">Séance terminée</text><text class="ts" x="300" y="620" text-anchor="middle">clôture auto chaque minute</text></g>
+<line class="arr" x1="420" y1="606" x2="468" y2="606" marker-end="url(#arrow)"/>
+<g class="c-gray"><rect x="470" y="580" width="170" height="52" rx="4"/><text class="th" x="555" y="602" text-anchor="middle">Pas d'email</text><text class="ts" x="555" y="620" text-anchor="middle">remboursé / fin &gt; 24 h</text></g>
+<line class="arr" x1="300" y1="632" x2="300" y2="668" marker-end="url(#arrow)"/>
+<g class="c-purple"><rect x="180" y="670" width="240" height="52" rx="4"/><text class="th" x="300" y="692" text-anchor="middle">Heures restantes ?</text><text class="ts" x="300" y="710" text-anchor="middle">après cette séance</text></g>
+<line class="arr" x1="300" y1="722" x2="300" y2="758" marker-end="url(#arrow)"/>
+<text class="ts" x="308" y="744">oui</text>
+<path class="arr" d="M420 696 L555 696 L555 758" marker-end="url(#arrow)"/>
+<text class="ts" x="487" y="689" text-anchor="middle">non (0 h)</text>
+<g class="c-teal"><rect x="180" y="760" width="240" height="52" rx="4"/><text class="th" x="300" y="782" text-anchor="middle">Lien séance suivante</text><text class="ts" x="300" y="800" text-anchor="middle">même lien de réservation</text></g>
+<g class="c-teal"><rect x="470" y="760" width="170" height="52" rx="4"/><text class="th" x="555" y="782" text-anchor="middle">Merci + boutique</text><text class="ts" x="555" y="800" text-anchor="middle">vers SHOP_URL</text></g>
+<path class="arr dash" d="M180 786 L160 786 L160 336 L178 336" marker-end="url(#arrow)"/>
+<text class="ts" x="152" y="560" text-anchor="end">le client rouvre</text>
+<text class="ts" x="152" y="576" text-anchor="end">le même lien</text>
+<line class="arr" x1="280" y1="812" x2="280" y2="848" marker-end="url(#arrow)"/>
+<path class="arr" d="M555 812 L555 830 L340 830 L340 848" marker-end="url(#arrow)"/>
+<g class="c-purple"><rect x="180" y="850" width="240" height="52" rx="4"/><text class="th" x="300" y="872" text-anchor="middle">Envoi auto ?</text><text class="ts" x="300" y="890" text-anchor="middle">case cochée par client</text></g>
+<line class="arr" x1="300" y1="902" x2="300" y2="938" marker-end="url(#arrow)"/>
+<text class="ts" x="308" y="924">non</text>
+<path class="arr" d="M420 876 L555 876 L555 938" marker-end="url(#arrow)"/>
+<text class="ts" x="487" y="869" text-anchor="middle">oui</text>
+<g class="c-gray"><rect x="180" y="940" width="240" height="52" rx="4"/><text class="th" x="300" y="962" text-anchor="middle">Brouillon Gmail</text><text class="ts" x="300" y="980" text-anchor="middle">compte rendu à ajouter</text></g>
+<g class="c-gray"><rect x="470" y="940" width="170" height="52" rx="4"/><text class="th" x="555" y="962" text-anchor="middle">Envoi direct</text><text class="ts" x="555" y="980" text-anchor="middle">sans relecture</text></g>
+<rect class="c-purple" x="40" y="1016" width="12" height="12" rx="2"/><text class="ts" x="58" y="1026">vérification / choix</text>
+<rect class="c-teal" x="200" y="1016" width="12" height="12" rx="2"/><text class="ts" x="218" y="1026">le client reçoit un email ou une invitation</text>
+<rect class="c-gray" x="500" y="1016" width="12" height="12" rx="2"/><text class="ts" x="518" y="1026">étape</text>
+</svg>

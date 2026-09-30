@@ -51,6 +51,20 @@ deploy/     Docker Compose · Caddy (derrière le nginx du serveur) · .env.exam
 | Admin | `/admin` (mot de passe unique) : indicateurs du mois, heures vendues/réalisées/restantes, prochains rendez-vous, liste des clients avec la case « Envoi auto » et le lien de réservation à copier, **ajout d’un client à la main** (payé hors du site : nom, email, heures, montant, envoi ou non du lien), **annulation d’une séance à venir** (déplacement : l’événement Google est supprimé, l’heure recréditée et le lien renvoyé au client si coché) et **modification des heures achetées** (remboursement partiel, heures supplémentaires ; jamais sous les heures déjà réservées). |
 | Annulations | Règle affichée au client (page de réservation et email de confirmation) : toute séance réservée est due ; déplacement gratuit jusqu’à 24 h avant en répondant à l’email de confirmation ; au-delà, ou en cas d’absence, l’heure est consommée. Un remboursement ne se fait que dans Stripe : total → lien révoqué et alerte admin ; partiel → accès conservé, ajuster les heures dans l’admin. |
 
+## Schémas
+
+### Qui échange quoi
+
+![Qui échange quoi : client, admin, frontend, backend, Stripe, Google Agenda, Gmail, PostgreSQL](docs/architecture.svg)
+
+Hors schéma : après paiement, Stripe renvoie le client vers `/reservation?session_id=…` ; Google Agenda lui envoie l’invitation, Gmail les emails (et à l’admin les alertes). Des agendas Google, seules les plages occupées sont lues : ni titre, ni participant, ni lien.
+
+### Parcours d’un achat et choix
+
+![Parcours d’un achat, de la vérification du paiement à l’email de la séance suivante](docs/parcours.svg)
+
+Au moment de réserver, le backend refuse aussi : une deuxième séance à venir sur le même achat, un achat sans heures restantes, et tout créneau si un agenda Google est en erreur (rien n’est proposé).
+
 ## Démarrage local (démo sans Google ni Stripe)
 
 Prérequis : Python 3.12+, [uv](https://docs.astral.sh/uv/), Node 22, PostgreSQL 16 (ou Docker).
