@@ -25,6 +25,7 @@ os.environ["ADMIN_PASSWORD_HASH"] = PasswordHasher().hash(ADMIN_PASSWORD)
 os.environ["SESSION_SECRET"] = "test-secret"
 os.environ["COOKIE_SECURE"] = "false"
 os.environ["STRIPE_ALLOWED_PRODUCT_IDS"] = ""
+os.environ["FOLLOW_UP_POLL_SECONDS"] = "0"  # tests drive the job explicitly
 
 PARIS = ZoneInfo("Europe/Paris")
 # Monday 5 October 2026, 08:00 Paris.
@@ -86,9 +87,13 @@ class FakeCalendar:
 class FakeMailer:
     def __init__(self):
         self.sent: list[dict] = []
+        self.drafts: list[dict] = []
 
     def send(self, to, subject, body):
         self.sent.append({"to": to, "subject": subject, "body": body})
+
+    def draft(self, to, subject, body):
+        self.drafts.append({"to": to, "subject": subject, "body": body})
 
 
 class FakeStripe:

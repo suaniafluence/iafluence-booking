@@ -4,6 +4,10 @@ import { api, ApiError, type BookingContext, type BookingInfo, type Slot } from 
 import { Alert, Button, Card, HoursSummary, Layout, Spinner } from "../components/Layout";
 import { dayKey, hm, hours, longDate, shortDay } from "../format";
 
+export const CANCELLATION_POLICY =
+  "Toute séance réservée est due. Vous pouvez la déplacer gratuitement jusqu’à 24 h avant son début en répondant à " +
+  "l’email de confirmation ; passé ce délai, ou en cas d’absence, l’heure est considérée comme consommée.";
+
 type Step =
   | { kind: "welcome" }
   | { kind: "pick"; notice?: string }
@@ -94,25 +98,52 @@ export default function Reservation() {
 
 function Welcome({ ctx, onNext }: { ctx: BookingContext; onNext: () => void }) {
   const p = ctx.purchase;
+  if (p.hours_remaining === 0) {
+    return (
+      <Card>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Toutes vos heures ont été utilisées</h1>
+        <p className="mt-4 text-slate-600">
+          Merci pour votre confiance. Pour poursuivre avec de nouvelles heures de conseil, rendez-vous sur{" "}
+          <a className="text-brand-600 underline" href="https://iafluence.fr">
+            iafluence.fr
+          </a>
+          .
+        </p>
+        <div className="mt-6">
+          <HoursSummary rows={[["Heures achetées", hours(p.hours_purchased)], ["Heures restantes", hours(0)]]} />
+        </div>
+      </Card>
+    );
+  }
+  // hours_booked > 0 with no upcoming booking: the previous session is over, this is the follow-up link.
+  const next = p.hours_booked > 0;
   return (
     <Card>
-      <p className="text-sm font-medium text-brand-600">Paiement reçu</p>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Votre conseil IA est confirmé</h1>
+      <p className="text-sm font-medium text-brand-600">{next ? "Conseil IA" : "Paiement reçu"}</p>
+      <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+        {next ? "Réservez votre prochaine session" : "Votre conseil IA est confirmé"}
+      </h1>
       <div className="mt-4 space-y-2 text-slate-600">
-        <p>Votre paiement a bien été reçu.</p>
-        <p>Choisissez maintenant le créneau de votre première session de conseil de 1 heure.</p>
-        <p>
-          Si vous avez acheté plusieurs heures, les séances suivantes seront planifiées avec vous après cette première
-          session.
-        </p>
+        {next ? (
+          <p>Choisissez le créneau de votre prochaine session de conseil de 1 heure.</p>
+        ) : (
+          <>
+            <p>Votre paiement a bien été reçu.</p>
+            <p>Choisissez maintenant le créneau de votre première session de conseil de 1 heure.</p>
+            <p>
+              Si vous avez acheté plusieurs heures, un lien pour réserver la séance suivante vous sera envoyé par email
+              après chaque session.
+            </p>
+          </>
+        )}
       </div>
       <div className="mt-6">
         <HoursSummary
           rows={[
             ["Prestation", "Conseil IA"],
             ["Heures achetées", hours(p.hours_purchased)],
-            ["Première session", "1 h"],
-            ["Heures restantes après cette session", hours(Math.max(p.hours_remaining - 1, 0))],
+            [next ? "Prochaine session" : "Première session", "1 h"],
+            ["Heures restantes après cette session", hours(p.hours_remaining - 1)],
           ]}
         />
       </div>
@@ -271,6 +302,7 @@ function Confirm({
       <p className="mt-4 text-sm text-slate-500">
         L’invitation et le lien de visioconférence seront envoyés à <strong>{ctx.customer.email}</strong>.
       </p>
+      <p className="mt-2 text-sm text-slate-500">{CANCELLATION_POLICY}</p>
       {error && (
         <div className="mt-4">
           <Alert>{error}</Alert>
@@ -335,8 +367,11 @@ function Done({
           ]}
         />
       </div>
+      <p className="mt-4 text-sm text-slate-500">{CANCELLATION_POLICY}</p>
       {hoursRemaining > 0 && (
-        <p className="mt-4 text-sm text-slate-500">Les séances suivantes seront planifiées avec vous après cette première session.</p>
+        <p className="mt-4 text-sm text-slate-500">
+          Un lien pour réserver la séance suivante vous sera envoyé par email après cette session.
+        </p>
       )}
     </Card>
   );

@@ -1,6 +1,6 @@
 Bonjour,
 
-Votre première session de conseil IA est confirmée.
+Votre {{ "première " if first_session }}session de conseil IA est confirmée.
 
 Date :
 {{ date_long }}
@@ -14,8 +14,13 @@ Lien visio :
 Vous avez acheté :
 {{ hours_purchased_label }} de conseil
 
-Après cette première session :
+Après cette {{ "première " if first_session }}session :
 {{ hours_remaining_label }} {{ "restera" if hours_remaining == 1 else "resteront" }} à programmer.
+{% if hours_remaining > 0 %}
+Un lien pour réserver la séance suivante vous sera envoyé par email après cette session.
+{% endif %}
+
+Toute séance réservée est due. Vous pouvez la déplacer gratuitement jusqu'à 24 h avant son début en répondant à cet email ; passé ce délai, ou en cas d'absence, l'heure est considérée comme consommée.
 
 Une invitation calendrier vous a également été envoyée.
 

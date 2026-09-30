@@ -127,6 +127,16 @@ class FulfillResult:
     created: bool
 
 
+def upsert_customer(db: Session, name: str, email: str) -> Customer:
+    """Email is the identity; the latest name wins."""
+    db.execute(
+        pg_insert(Customer).values(name=name, email=email).on_conflict_do_update(
+            index_elements=[Customer.email], set_={"name": name}
+        )
+    )
+    return db.scalar(select(Customer).where(Customer.email == email).execution_options(populate_existing=True))
+
+
 def fulfill_checkout(db: Session, stripe_gw: StripeGateway, session_id: str) -> FulfillResult:
     existing = db.scalar(select(Purchase).where(Purchase.stripe_checkout_session_id == session_id))
     if existing is not None:
@@ -134,13 +144,7 @@ def fulfill_checkout(db: Session, stripe_gw: StripeGateway, session_id: str) -> 
 
     info = parse_checkout(stripe_gw.retrieve_checkout_session(session_id))
 
-    # Upsert the customer (email is the identity).
-    db.execute(
-        pg_insert(Customer)
-        .values(name=info.name, email=info.email)
-        .on_conflict_do_update(index_elements=[Customer.email], set_={"name": info.name})
-    )
-    customer = db.scalar(select(Customer).where(Customer.email == info.email))
+    customer = upsert_customer(db, info.name, info.email)
 
     inserted_id = db.scalar(
         pg_insert(Purchase)

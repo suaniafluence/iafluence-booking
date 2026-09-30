@@ -12,5 +12,5 @@ Paiement :
 Le lien de réservation a été révoqué.
 {% if booking %}
 ATTENTION : un rendez-vous est déjà planifié le {{ booking }}.
-Il n'a pas été annulé automatiquement — à traiter manuellement.
+Il n'a pas été annulé automatiquement : annulez-le depuis l'admin (Prochains rendez-vous → Annuler).
 {% endif %}

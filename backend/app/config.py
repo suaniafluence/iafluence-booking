@@ -10,6 +10,8 @@ class Config(BaseSettings):
 
     database_url: str = "postgresql+psycopg://iafluence:iafluence@localhost:5432/iafluence"
     public_base_url: str = "http://localhost:5173"
+    # Where clients buy more hours (thank-you email after their last session).
+    shop_url: str = "https://iafluence.fr"
 
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
@@ -26,6 +28,9 @@ class Config(BaseSettings):
     admin_password_hash: str = ""
     session_secret: str = "change-me"
     cookie_secure: bool = True
+
+    # End-of-session job: how often finished sessions are closed and the next-session link emailed. 0 = off.
+    follow_up_poll_seconds: int = 60
 
     # Local demo only: replace Google/Stripe/Gmail with in-memory fakes (see app/dev_fakes.py).
     fake_integrations: bool = False

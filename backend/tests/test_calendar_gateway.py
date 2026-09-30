@@ -181,21 +181,38 @@ def test_create_event_without_any_video_entry_point():
 
 
 class _DeleteApi:
-    def __init__(self):
-        self.calls = []
+    def __init__(self, exc=None):
+        self.calls, self.exc = [], exc
 
     def events(self):
         return self
 
     def delete(self, **kw):
         self.calls.append(kw)
-        return _Call({})
+        return _Call({}, self.exc)
+
+
+class _HttpError(Exception):
+    def __init__(self, status):
+        super().__init__(f"HTTP {status}")
+        self.resp = type("Resp", (), {"status": status})()
 
 
 def test_delete_event_notifies_attendees():
     api = _DeleteApi()
     GoogleCalendarGateway(lambda: api).delete_event("cal", "evt1")
     assert api.calls == [{"calendarId": "cal", "eventId": "evt1", "sendUpdates": "all"}]
+
+
+@pytest.mark.parametrize("status", [404, 410])
+def test_delete_event_already_gone_is_fine(status):
+    GoogleCalendarGateway(lambda: _DeleteApi(_HttpError(status))).delete_event("cal", "evt1")
+
+
+@pytest.mark.parametrize("exc", [_HttpError(403), _HttpError(500), OSError("network down")])
+def test_delete_event_failure_is_a_write_error(exc):
+    with pytest.raises(CalendarWriteError, match=str(exc)):
+        GoogleCalendarGateway(lambda: _DeleteApi(exc)).delete_event("cal", "evt1")
 
 
 def test_default_api_factory_is_google_client():

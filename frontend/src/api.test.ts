@@ -48,6 +48,27 @@ describe("api", () => {
     );
     await api.adminLogout();
     expect(fetch).toHaveBeenLastCalledWith("/api/admin/logout", expect.objectContaining({ method: "POST" }));
+    const client = { name: "C", email: "c@x.fr", hours: 2, product_name: "Conseil IA", amount_cents: 0, send_link: true };
+    await api.adminAddClient(client);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/clients",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(client) }),
+    );
+    await api.adminCancelBooking(21, false);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/bookings/21/cancel",
+      expect.objectContaining({ method: "POST", body: '{"notify":false}' }),
+    );
+    await api.adminSetHours(3, 2);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/purchases/3",
+      expect.objectContaining({ method: "PATCH", body: '{"hours_purchased":2}' }),
+    );
+    await api.adminSetAutoSend(7, true);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/customers/7",
+      expect.objectContaining({ method: "PATCH", body: '{"auto_send_next_link":true}' }),
+    );
   });
 
   it("turns API errors into ApiError with the server message and code", async () => {

@@ -4,16 +4,24 @@ from zoneinfo import ZoneInfo
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Response
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_config
 from app.db import get_db
-from app.deps import get_now
-from app.models import Booking, Purchase
-from app.schemas import LoginIn
+from app.deps import get_calendar, get_mailer, get_now
+from app.models import Booking, BookingToken, Customer, Purchase
+from app.schemas import (
+    CancelBookingIn,
+    CustomerPatchIn,
+    LoginIn,
+    ManualClientIn,
+    ManualClientOut,
+    PurchaseHoursIn,
+)
+from app.services import booking_service, manual_purchase, notifications
 from app.services.settings_service import get_settings
 
 router = APIRouter(prefix="/api/admin")
@@ -82,7 +90,7 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
     done_seconds = db.scalar(
         select(func.coalesce(func.sum(func.extract("epoch", Booking.end_datetime - Booking.start_datetime)), 0))
         .join(Purchase)
-        .where(Booking.status == "confirmed", Booking.end_datetime <= now, paid)
+        .where(Booking.status.in_(("confirmed", "completed")), Booking.end_datetime <= now, paid)
     )
     hours_done = float(done_seconds) / 3600
 
@@ -100,6 +108,15 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
         .order_by(Purchase.created_at.desc())
         .limit(200)
     ).all()
+
+    # Newest active token per purchase, so the admin can copy a client's booking link.
+    tokens = dict(
+        db.execute(
+            select(BookingToken.purchase_id, BookingToken.token)
+            .where(BookingToken.revoked_at.is_(None), BookingToken.purchase_id.in_([p.id for p in purchases]))
+            .order_by(BookingToken.id)
+        ).all()
+    )
 
     def booking_dict(b: Booking) -> dict:
         return {
@@ -119,12 +136,19 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
             "hours_to_deliver": int(hours_sold) - hours_done,
         },
         "upcoming": [
-            {"customer": b.customer.name, "email": b.customer.email, "product": b.purchase.product_name, **booking_dict(b)}
+            {
+                "booking_id": b.id,
+                "customer": b.customer.name,
+                "email": b.customer.email,
+                "product": b.purchase.product_name,
+                **booking_dict(b),
+            }
             for b in upcoming
         ],
         "clients": [
             {
                 "purchase_id": p.id,
+                "customer_id": p.customer_id,
                 "name": p.customer.name,
                 "email": p.customer.email,
                 "product": p.product_name,
@@ -132,9 +156,76 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
                 "hours_booked": p.hours_booked,
                 "hours_remaining": p.hours_remaining,
                 "payment_status": p.payment_status,
+                "manual": p.product_id == manual_purchase.MANUAL_PRODUCT_ID,
+                "auto_send_next_link": p.customer.auto_send_next_link,
+                "booking_url": notifications.booking_url(tokens[p.id]) if p.id in tokens else None,
                 "created_at": p.created_at.astimezone(tz).isoformat(),
                 "booking": next((booking_dict(b) for b in p.bookings if b.status == "confirmed"), None),
             }
             for p in purchases
         ],
     }
+
+
+@router.post("/clients", response_model=ManualClientOut, status_code=201, dependencies=[Depends(require_admin)])
+def add_client(
+    body: ManualClientIn,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    mailer=Depends(get_mailer),
+):
+    """A client paid outside the website: create the purchase and its booking link by hand."""
+    created = manual_purchase.create(
+        db,
+        name=body.name.strip(),
+        email=str(body.email).lower(),
+        hours=body.hours,
+        product_name=body.product_name.strip(),
+        amount_cents=body.amount_cents,
+    )
+    if body.send_link:
+        background.add_task(notifications.send_booking_link, mailer, created.purchase.id, created.token)
+    return ManualClientOut(purchase_id=created.purchase.id, booking_url=notifications.booking_url(created.token))
+
+
+@router.patch("/customers/{customer_id}", dependencies=[Depends(require_admin)])
+def update_customer(customer_id: int, body: CustomerPatchIn, db: Session = Depends(get_db)):
+    customer = db.get(Customer, customer_id)
+    if customer is None:
+        raise HTTPException(404, "Client introuvable.")
+    customer.auto_send_next_link = body.auto_send_next_link
+    db.commit()
+    return {"customer_id": customer.id, "auto_send_next_link": customer.auto_send_next_link}
+
+
+@router.post("/bookings/{booking_id}/cancel", dependencies=[Depends(require_admin)])
+def cancel_booking(
+    booking_id: int,
+    body: CancelBookingIn,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    calendar=Depends(get_calendar),
+    mailer=Depends(get_mailer),
+    now: datetime = Depends(get_now),
+):
+    """Session moved or cancelled: the Google event is deleted and the hour goes back to the client."""
+    booking = booking_service.cancel(db, calendar, booking_id, now)
+    if body.notify:
+        background.add_task(notifications.send_booking_cancelled, mailer, booking.id)
+    return {"status": "cancelled", **booking_service.hours_summary(booking.purchase)}
+
+
+@router.patch("/purchases/{purchase_id}", dependencies=[Depends(require_admin)])
+def update_purchase_hours(purchase_id: int, body: PurchaseHoursIn, db: Session = Depends(get_db)):
+    """Adjust the hours of a purchase (partial refund, extra hours paid outside the website)."""
+    purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id).with_for_update())
+    if purchase is None:
+        raise HTTPException(404, "Achat introuvable.")
+    if body.hours_purchased < purchase.hours_booked:
+        db.rollback()
+        raise HTTPException(
+            422, f"Impossible : {purchase.hours_booked} h sont déjà réservées ou réalisées pour ce client."
+        )
+    purchase.hours_purchased = body.hours_purchased
+    db.commit()
+    return booking_service.hours_summary(purchase)

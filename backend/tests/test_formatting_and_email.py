@@ -61,6 +61,7 @@ def _confirmation(**over):
         hours_remaining=1,
         hours_remaining_label="1 heure",
         consultant_name="Suan Tay",
+        first_session=True,
     )
     ctx.update(over)
     return render("customer_confirmation.txt", **ctx)
@@ -151,3 +152,41 @@ def test_send_safely_skips_missing_recipient(caplog):
 def test_send_safely_swallows_and_logs_failures(caplog):
     assert send_safely(_RecordingMailer(RuntimeError("quota")), "a@b.fr", "Sujet", "B") is False
     assert "email 'Sujet' to a@b.fr failed" in caplog.text
+
+
+class _StubGmailDrafts:
+    def __init__(self):
+        self.created = []
+
+    def users(self):
+        return self
+
+    def drafts(self):
+        return self
+
+    def create(self, userId, body):
+        self.created.append((userId, body))
+        return self
+
+    def execute(self):
+        return {"id": "draft_1"}
+
+
+def test_gmail_mailer_creates_a_draft(monkeypatch):
+    monkeypatch.setattr(email_service, "get_config", lambda: Config(mail_from="contact@iafluence.fr"))
+    api = _StubGmailDrafts()
+    GmailMailer(lambda: api).draft("jean@proton.me", "Prochaine session", "Bonjour")
+    [(user_id, body)] = api.created
+    assert user_id == "me"
+    msg = email.message_from_bytes(base64.urlsafe_b64decode(body["message"]["raw"]), policy=policy.default)
+    assert (msg["To"], msg["Subject"], msg.get_content()) == ("jean@proton.me", "Prochaine session", "Bonjour\n")
+
+
+def test_send_safely_as_draft():
+    class M(_RecordingMailer):
+        def draft(self, to, subject, body):
+            self.drafted = (to, subject, body)
+
+    m = M()
+    assert send_safely(m, "a@b.fr", "S", "B", as_draft=True) is True
+    assert m.drafted == ("a@b.fr", "S", "B") and m.sent == []

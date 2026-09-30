@@ -53,6 +53,9 @@ class DemoMailer:
     def send(self, to, subject, body):
         log.info("[demo] email to %s — %s\n%s", to, subject, body)
 
+    def draft(self, to, subject, body):
+        log.info("[demo] draft to %s — %s\n%s", to, subject, body)
+
 
 class DemoStripe:
     PATTERN = re.compile(r"^cs_demo_(\d+)h_([a-z0-9]+)$")

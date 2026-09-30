@@ -52,8 +52,10 @@ def test_google_credentials_come_from_config(monkeypatch):
     creds = google_client.credentials()
     assert (creds.client_id, creds.client_secret, creds.refresh_token) == ("cid", "csecret", "rtok")
     assert creds.token_uri == "https://oauth2.googleapis.com/token"
-    assert set(creds.scopes) == set(google_client.SCOPES)
-    assert "https://www.googleapis.com/auth/gmail.send" in google_client.SCOPES
+    assert creds.scopes is None  # an older refresh token must not fail on a newly added scope
+    assert {"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.compose"} <= set(
+        google_client.SCOPES
+    )
     # Least privilege: no scope that can read event details or emails.
     assert not any(s.endswith("/calendar") or s.endswith("calendar.readonly") or "gmail.readonly" in s for s in google_client.SCOPES)
 
@@ -105,6 +107,8 @@ def test_demo_mailer_logs_instead_of_sending(caplog):
     caplog.set_level(logging.INFO)
     DemoMailer().send("jean@example.com", "Sujet", "Corps")
     assert "jean@example.com" in caplog.text and "Sujet" in caplog.text and "Corps" in caplog.text
+    DemoMailer().draft("marie@example.com", "Brouillon", "Texte")
+    assert "draft to marie@example.com" in caplog.text and "Brouillon" in caplog.text
 
 
 def test_demo_stripe_sessions_are_valid_checkouts():
