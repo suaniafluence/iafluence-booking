@@ -302,6 +302,24 @@ def test_fireflies_errors_are_retried_at_the_next_poll(finished, fakes, gw, capl
     assert (report().status, report().error) == ("drafted", None)
 
 
+def test_one_summary_per_cycle(client, fakes, gw, token_for):
+    starts = [SLOT, paris(2026, 10, 8, 16)]
+    for i, start in enumerate(starts):
+        email = f"c{i}@example.com"
+        token = token_for(f"cs_cycle_{i}", hours=2, email=email)
+        assert client.post("/api/bookings", json={"token": token, "start": start.isoformat()}).status_code == 201
+        fakes["fireflies"].add(f"ff_{i}", start, [email])
+    ended = starts[1] + timedelta(hours=1)
+    follow_up.process_finished_sessions(fakes["mailer"], ended)
+    session_reports.process(gw, ended + POLL)
+    with SessionLocal() as db:
+        assert list(db.scalars(select(SessionReport.status).order_by(SessionReport.id))) == ["drafted", "summarizing"]
+    session_reports.process(gw, ended + POLL + timedelta(minutes=1))
+    with SessionLocal() as db:
+        assert list(db.scalars(select(SessionReport.status).order_by(SessionReport.id))) == ["drafted", "drafted"]
+    assert len(fakes["codex"].turns) == 2
+
+
 def test_one_fireflies_request_for_all_waiting_sessions(client, fakes, gw, token_for):
     starts = [SLOT, paris(2026, 10, 8, 16)]
     for i, start in enumerate(starts):

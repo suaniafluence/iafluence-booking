@@ -346,10 +346,11 @@ def test_cancel_and_restart(admin, fakes):
     assert admin.post("/api/admin/codex/login/1/cancel").json()["status"] == "CANCELLED"
     assert fakes["codex"].cancelled == ["login-1"]
 
-    # A new « Connecter Codex » replaces a pending one.
+    # A new « Connecter Codex » replaces a pending one, on the app-server too.
     admin.post("/api/admin/codex/login")
     admin.post("/api/admin/codex/login")
     assert [login.status for login in logins()] == ["CANCELLED", "CANCELLED", "PENDING"]
+    assert fakes["codex"].cancelled == ["login-1", "login-2"]
 
     fakes["codex"].unavailable = True
     assert admin.post("/api/admin/codex/login/3/cancel").json()["status"] == "CANCELLED"

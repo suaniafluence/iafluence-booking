@@ -39,9 +39,9 @@ def finish(login_id: str, status: str, error: str | None) -> None:
 
 
 def start(db: Session, codex: CodexGateway, now: datetime) -> CodexLogin:
+    """A new « Connecter Codex » replaces the login still pending, if any."""
     for pending in db.scalars(select(CodexLogin).where(CodexLogin.status == "PENDING").with_for_update()):
-        _close(pending, "CANCELLED", now)
-    db.commit()
+        cancel(db, codex, pending, now)
     code = codex.start_login(finish)
     login = CodexLogin(
         login_id=code.login_id,

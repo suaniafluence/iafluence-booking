@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, defer, joinedload
 
 from app.config import get_config
 from app.db import SessionLocal
@@ -445,9 +445,11 @@ def erase_expired(now: datetime) -> None:
 
 
 def process(gw: Gateways, now: datetime) -> None:
+    """One cycle. At most one summary per cycle: a Codex turn takes minutes, and the next report is claimed at the
+    next cycle, with a fresh clock (a few sessions a day: a one-minute gap does not matter)."""
     erase_expired(now)
     poll_transcripts(gw, now)
-    while (report_id := _claim(now)) is not None:
+    if (report_id := _claim(now)) is not None:
         _send_all(gw.mailer, summarize(gw, report_id, now))
     draft_ready(gw.mailer, now)
 
@@ -505,9 +507,10 @@ def draft_without_summary(db: Session, report_id: int, now: datetime) -> Email |
 def overview(db: Session, tz: ZoneInfo, limit: int = 30) -> list[dict]:
     """Finished sessions, newest first, with their report (None before the feature was on)."""
     rows = db.execute(
-        select(Booking, SessionReport)
+        select(Booking, SessionReport, SessionReport.image_png.is_not(None))
         .outerjoin(SessionReport, SessionReport.booking_id == Booking.id)
-        .options(joinedload(Booking.customer), joinedload(Booking.purchase))
+        # The PNGs are served one by one (reports/{id}/image.png), never loaded for the list.
+        .options(joinedload(Booking.customer), joinedload(Booking.purchase), defer(SessionReport.image_png))
         .where(Booking.status == "completed")
         .order_by(Booking.start_datetime.desc())
         .limit(limit)
@@ -537,12 +540,12 @@ def overview(db: Session, tz: ZoneInfo, limit: int = 30) -> list[dict]:
                 "waiting_until": iso(report.waiting_since + wait),
                 "error": report.error,
                 "synthese": report.summary,
-                "has_image": report.image_png is not None,
+                "has_image": bool(has_image),
                 "delivery": report.delivery,
                 "with_summary": report.with_summary,
                 "drafted_at": iso(report.drafted_at),
                 "erased": report.erased_at is not None,
             },
         }
-        for booking, report in rows
+        for booking, report, has_image in rows
     ]
