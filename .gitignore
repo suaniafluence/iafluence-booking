@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Test artefacts
+backend/mutants/
+backend/mutation-report/
+frontend/coverage/
+frontend/reports/
+frontend/.stryker-tmp/
+frontend/test-results/
+frontend/playwright-report/

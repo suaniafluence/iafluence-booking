@@ -24,8 +24,44 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "httpx>=0.27",
+    "pytest-cov>=7.1.0",
+]
+mutation = [
+    "mutmut>=3.8",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = [
+    # runpy re-executes scripts.* as __main__ in the CLI tests.
+    "ignore:.*found in sys.modules after import of package:RuntimeWarning",
+]
+
+[tool.coverage.run]
+source = ["app", "scripts"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+
+# Mutation testing — Linux/macOS only (mutmut needs fork()). On Windows: ./mutation.sh runs it in Docker.
+[tool.mutmut]
+source_paths = ["app/"]
+# Declarative code (ORM/pydantic models, wiring) and the local demo fakes: mutants there are noise.
+do_not_mutate = [
+    "app/models.py",
+    "app/schemas.py",
+    "app/db.py",
+    "app/config.py",
+    "app/deps.py",
+    "app/dev_fakes.py",
+    "app/services/google_client.py",
+]
+# Log lines are for humans; mutating their wording is noise.
+do_not_mutate_patterns = ['^\s*log\.(debug|info|warning|exception)\(']
+also_copy = ["alembic/", "alembic.ini", "scripts/", "tests/"]
+pytest_add_cli_args_test_selection = ["tests/"]
+pytest_add_cli_args = ["-p", "no:cacheprovider", "-q"]

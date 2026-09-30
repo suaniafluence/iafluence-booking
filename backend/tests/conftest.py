@@ -44,9 +44,12 @@ class FakeCalendar:
         self.errors: set[str] = set()
         self.events: list[dict] = []
         self.deleted: list[str] = []
+        self.deleted_from: list[str] = []
         self.freebusy_calls: list[list[str]] = []
         self.fail_create = False
         self.create_delay = 0.0
+        # Google shows created events in free/busy; False simulates its propagation delay.
+        self.mirror_events = True
         self._lock = threading.Lock()
 
     def free_busy(self, calendar_ids, time_min, time_max):
@@ -58,9 +61,10 @@ class FakeCalendar:
             raise CalendarUnavailable("fake error")
         with self._lock:
             out = [Interval(s, e) for cid in calendar_ids for s, e in self.busy.get(cid, [])]
-            # Events created through the fake are visible in free/busy like in Google.
-            out += [Interval(ev["start"], ev["end"]) for ev in self.events if ev["calendar_id"] in calendar_ids]
-        return out
+            if self.mirror_events:
+                out += [Interval(ev["start"], ev["end"]) for ev in self.events if ev["calendar_id"] in calendar_ids]
+        # Like Google: only busy periods intersecting the requested range.
+        return [b for b in out if b.start < time_max and b.end > time_min]
 
     def create_event(self, calendar_id, **kw):
         from app.services.calendar_service import CalendarWriteError, CreatedEvent
@@ -76,6 +80,7 @@ class FakeCalendar:
 
     def delete_event(self, calendar_id, event_id):
         self.deleted.append(event_id)
+        self.deleted_from.append(calendar_id)
 
 
 class FakeMailer:
@@ -137,7 +142,8 @@ def migrated_db():
     from alembic import command
     from alembic.config import Config
 
-    cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+    # No ini file: its [loggers] section would run fileConfig(), which disables every app logger (caplog).
+    cfg = Config()
     cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "..", "alembic"))
     command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")
