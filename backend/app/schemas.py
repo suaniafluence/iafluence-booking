@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import AwareDatetime, BaseModel, EmailStr, Field
+from pydantic import AwareDatetime, BaseModel, EmailStr, Field, StringConstraints
 
 
 class Slot(BaseModel):
@@ -62,11 +63,15 @@ class LoginIn(BaseModel):
     password: str
 
 
+# Stripped before the length check, so whitespace-only values are rejected.
+Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+
+
 class ManualClientIn(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
+    name: Label
     email: EmailStr
     hours: int = Field(ge=1, le=100)
-    product_name: str = Field("Conseil IA", min_length=1, max_length=255)
+    product_name: Label = "Conseil IA"
     amount_cents: int = Field(0, ge=0)
     send_link: bool = True
 
