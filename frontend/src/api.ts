@@ -84,6 +84,82 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ auto_send_next_link: autoSend }),
     }),
+  adminRetryReport: (reportId: number) =>
+    request<{ id: number; status: ReportStatus }>(`/api/admin/reports/${reportId}/retry`, { method: "POST" }),
+  adminDraftWithoutSummary: (reportId: number) =>
+    request<{ id: number; status: ReportStatus }>(`/api/admin/reports/${reportId}/draft-without-summary`, {
+      method: "POST",
+    }),
+  adminSetReportSettings: (sendWithoutReview: boolean) =>
+    request<{ send_without_review: boolean }>("/api/admin/report-settings", {
+      method: "PATCH",
+      body: JSON.stringify({ send_without_review: sendWithoutReview }),
+    }),
+  adminCodexStatus: () => request<CodexStatus>("/api/admin/codex"),
+  adminCodexLogin: () => request<CodexLogin>("/api/admin/codex/login", { method: "POST" }),
+  adminCodexLoginStatus: (loginId: number) => request<CodexLogin>(`/api/admin/codex/login/${loginId}`),
+  adminCodexCancelLogin: (loginId: number) =>
+    request<CodexLogin>(`/api/admin/codex/login/${loginId}/cancel`, { method: "POST" }),
+  adminCodexLogout: () => request<{ state: "disconnected" }>("/api/admin/codex/logout", { method: "POST" }),
+};
+
+/** Served to the logged-in admin only (session cookie on /api/admin). */
+export const reportImageUrl = (reportId: number) => `/api/admin/reports/${reportId}/image.png`;
+
+export type ReportStatus = "waiting_transcript" | "summarizing" | "ready" | "drafted" | "failed";
+
+export type Synthese = {
+  objectifs: string[];
+  points_abordes: string[];
+  decisions: string[];
+  actions_client: string[];
+  prochaines_etapes: string[];
+};
+
+export type SessionReport = {
+  id: number;
+  status: ReportStatus;
+  transcript_found: boolean;
+  transcript_attempts: number;
+  summary_attempts: number;
+  next_attempt_at: string | null;
+  waiting_until: string;
+  error: string | null;
+  synthese: Synthese | null;
+  has_image: boolean;
+  delivery: "draft" | "sent" | null;
+  with_summary: boolean | null;
+  drafted_at: string | null;
+  erased: boolean;
+};
+
+export type FinishedSession = {
+  booking_id: number;
+  customer: string;
+  email: string;
+  product: string;
+  start: string;
+  end: string;
+  report: SessionReport | null;
+};
+
+export type CodexLoginStatus = "PENDING" | "COMPLETED" | "EXPIRED" | "DENIED" | "CANCELLED" | "ERROR";
+
+export type CodexLogin = {
+  id: number;
+  status: CodexLoginStatus;
+  verification_url: string | null;
+  user_code: string | null;
+  expires_at: string;
+  error: string | null;
+};
+
+export type CodexStatus = {
+  state: "connected" | "expired" | "disconnected" | "unavailable" | "not_configured";
+  email: string | null;
+  plan: string | null;
+  detail: string | null;
+  pending_login: CodexLogin | null;
 };
 
 export type NewClient = {
@@ -122,4 +198,5 @@ export type AdminOverview = {
     created_at: string;
     booking: BookingInfo | null;
   }[];
+  reports: { enabled: boolean; send_without_review: boolean; sessions: FinishedSession[] };
 };

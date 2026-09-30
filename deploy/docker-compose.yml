@@ -29,6 +29,27 @@ services:
         condition: service_healthy
         required: false
 
+  # Session reports (optional, COMPOSE_PROFILES=codex): codex app-server, logged in with the ChatGPT plan from the admin
+  # (« Connexion Codex »). No published port: only the API reaches it, with CODEX_WS_TOKEN. Its OAuth tokens stay in
+  # the codex-home volume and never reach the API, the browser or the logs.
+  codex:
+    profiles: [codex]
+    build:
+      context: codex
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-0.159.2}
+    image: iafluence-booking-codex:${CODEX_VERSION:-0.159.2}
+    restart: unless-stopped
+    environment:
+      CODEX_WS_TOKEN: ${CODEX_WS_TOKEN:-}
+    volumes:
+      - codex-home:/codex-home
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4500/readyz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   web:
     # Stock Caddy image: the React app is built by CI and shipped as frontend/dist in the release,
     # so nothing (no Node, no npm) is needed on the server.
@@ -45,3 +66,4 @@ services:
 
 volumes:
   pgdata:
+  codex-home:
