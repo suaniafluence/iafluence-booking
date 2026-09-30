@@ -190,3 +190,66 @@ def test_send_safely_as_draft():
     m = M()
     assert send_safely(m, "a@b.fr", "S", "B", as_draft=True) is True
     assert m.drafted == ("a@b.fr", "S", "B") and m.sent == []
+
+
+def test_html_email_with_inline_image(monkeypatch):
+    monkeypatch.setattr(email_service, "get_config", lambda: Config(mail_from="contact@iafluence.fr"))
+    api = _StubGmailDrafts()
+    GmailMailer(lambda: api).draft(
+        "jean@proton.me", "Compte rendu", "Texte", html='<img src="cid:compte-rendu">', images={"compte-rendu": b"PNG"}
+    )
+    [(_, body)] = api.created
+    msg = email.message_from_bytes(base64.urlsafe_b64decode(body["message"]["raw"]), policy=policy.default)
+    assert msg.get_content_type() == "multipart/alternative"
+    plain, related = msg.get_payload()
+    assert (plain.get_content(), related.get_content_type()) == ("Texte\n", "multipart/related")
+    html, png = related.get_payload()
+    assert html.get_content() == '<img src="cid:compte-rendu">\n'
+    assert (png.get_content_type(), png["Content-ID"], png.get_content()) == ("image/png", "<compte-rendu>", b"PNG")
+    assert png.get_content_disposition() == "inline" and png.get_filename() == "compte-rendu.png"
+
+
+def test_html_email_with_inline_image_is_sent(monkeypatch):
+    monkeypatch.setattr(email_service, "get_config", lambda: Config(mail_from="contact@iafluence.fr"))
+    api = _StubGmail()
+    GmailMailer(lambda: api).send("jean@proton.me", "S", "T", html="<p>T</p>")
+    [(_, body)] = api.sent
+    msg = email.message_from_bytes(base64.urlsafe_b64decode(body["raw"]), policy=policy.default)
+    # No image: a plain text/html alternative.
+    assert [p.get_content_type() for p in msg.iter_parts()] == ["text/plain", "text/html"]
+
+
+def test_send_safely_passes_the_html_part_only_when_there_is_one():
+    class M:
+        def __init__(self):
+            self.calls = []
+
+        def send(self, to, subject, body, **parts):
+            self.calls.append(parts)
+
+        draft = send
+
+    m = M()
+    send_safely(m, "a@b.fr", "S", "B")
+    send_safely(m, "a@b.fr", "S", "B", as_draft=True, html="<p>B</p>", images={"x": b"1"})
+    assert m.calls == [{}, {"html": "<p>B</p>", "images": {"x": b"1"}}]
+
+
+def test_html_templates_are_escaped_text_templates_are_not():
+    assert email_service.render("session_report.html", **_report_ctx("<b>")).count("&lt;b&gt;") == 1
+    assert "<b>" in email_service.render("session_report.txt", **_report_ctx("<b>"))
+
+
+def _report_ctx(item):
+    return {
+        "name": "Jean",
+        "date_long": "jeudi 8 octobre 2026",
+        "sections": [("Décisions", [item])],
+        "image_cid": None,
+        "last": True,
+        "hours_purchased_label": "1 heure",
+        "hours_remaining_label": "0 heure",
+        "booking_url": None,
+        "shop_url": "https://iafluence.fr",
+        "consultant_name": "Suan Tay",
+    }

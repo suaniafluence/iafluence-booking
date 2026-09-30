@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "../api";
-import { deferred, overview } from "../test/fixtures";
+import { codexStatus, deferred, overview } from "../test/fixtures";
 import Admin from "./Admin";
 
 const plain = (s: string | null) => (s ?? "").replace(/\p{Zs}/gu, " ");
@@ -10,6 +10,7 @@ const unauthorized = () => new ApiError(401, "Authentification requise.");
 
 beforeEach(() => {
   vi.spyOn(api, "adminOverview").mockResolvedValue(overview());
+  vi.spyOn(api, "adminCodexStatus").mockResolvedValue(codexStatus({ state: "connected", email: "suan@iafluence.fr" }));
 });
 
 describe("Admin", () => {

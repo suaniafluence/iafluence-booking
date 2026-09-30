@@ -88,12 +88,117 @@ class FakeMailer:
     def __init__(self):
         self.sent: list[dict] = []
         self.drafts: list[dict] = []
+        self.fail = False
 
-    def send(self, to, subject, body):
-        self.sent.append({"to": to, "subject": subject, "body": body})
+    def _record(self, box, to, subject, body, parts):
+        if self.fail:
+            raise RuntimeError("gmail down")
+        box.append({"to": to, "subject": subject, "body": body, **parts})
 
-    def draft(self, to, subject, body):
-        self.drafts.append({"to": to, "subject": subject, "body": body})
+    def send(self, to, subject, body, **parts):
+        self._record(self.sent, to, subject, body, parts)
+
+    def draft(self, to, subject, body, **parts):
+        self._record(self.drafts, to, subject, body, parts)
+
+
+class FakeFireflies:
+    """Recordings added by the test; `sentences` of a transcript id, [] while « processing »."""
+
+    def __init__(self):
+        self.recordings: list = []
+        self.transcripts: dict[str, list] = {}
+        self.list_calls: list[tuple] = []
+        self.fail: Exception | None = None
+        self.fail_sentences: Exception | None = None
+
+    def add(self, transcript_id, start, emails=(), meeting_link=None, sentences=None):
+        from app.services.fireflies import Sentence, TranscriptMeta
+
+        self.recordings.append(TranscriptMeta(transcript_id, start, frozenset(emails), meeting_link))
+        self.transcripts[transcript_id] = [
+            Sentence(*s)
+            for s in (sentences if sentences is not None else [("Suan", "Bonjour"), ("Client", "Voici mon projet")])
+        ]
+
+    def list_transcripts(self, time_min, time_max):
+        self.list_calls.append((time_min, time_max))
+        if self.fail:
+            raise self.fail
+        return [r for r in self.recordings if time_min <= r.start <= time_max]
+
+    def sentences(self, transcript_id):
+        if self.fail_sentences:
+            raise self.fail_sentences
+        return self.transcripts[transcript_id]
+
+
+VALID_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="#eef2ff"/></svg>'
+SYNTHESE = {
+    "objectifs": ["Cadrer le projet d'assistant"],
+    "points_abordes": ["Cas d'usage prioritaires", "Choix de l'outil"],
+    "decisions": ["Démarrer par les devis"],
+    "actions_client": ["Rassembler dix devis"],
+    "prochaines_etapes": ["Prototype à la prochaine séance"],
+}
+
+
+class FakeCodex:
+    """Connected by default. `answers` are returned one per turn (a str, or an exception to raise)."""
+
+    def __init__(self):
+        from app.services.codex import CodexAccount
+
+        self.connected: CodexAccount | None = CodexAccount("suan@iafluence.fr", "plus")
+        self.answers: list = []
+        self.turns: list[dict] = []
+        self.logins: list = []
+        self.cancelled: list[str] = []
+        self.logged_out = 0
+        self.unavailable = False
+
+    @staticmethod
+    def answer(synthese=None, image=VALID_SVG) -> str:
+        return json.dumps({"synthese": synthese or SYNTHESE, "image": image})
+
+    def _check(self):
+        from app.services.codex import CodexUnavailable
+
+        if self.unavailable:
+            raise CodexUnavailable("codex app-server injoignable (ConnectionRefusedError)")
+
+    def account(self):
+        self._check()
+        return self.connected
+
+    def start_login(self, on_done):
+        from app.services.codex import DeviceCode
+
+        self._check()
+        code = DeviceCode(f"login-{len(self.logins) + 1}", "https://auth.openai.com/codex/device", "ABCD-1234")
+        self.logins.append((code, on_done))
+        return code
+
+    def cancel_login(self, login_id):
+        self._check()
+        self.cancelled.append(login_id)
+
+    def logout(self):
+        self._check()
+        self.logged_out += 1
+        self.connected = None
+
+    def run_turn(self, *, instructions, prompt, output_schema):
+        from app.services.codex import CodexNotConnected
+
+        self._check()
+        self.turns.append({"instructions": instructions, "prompt": prompt, "output_schema": output_schema})
+        if self.connected is None:
+            raise CodexNotConnected("Codex n'est pas connecté")
+        answer = self.answers.pop(0) if self.answers else self.answer()
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
 
 class FakeStripe:
@@ -168,7 +273,7 @@ def db_clean(migrated_db):
         db.execute(
             text(
                 "TRUNCATE customers, purchases, booking_tokens, bookings, calendar_sources, "
-                "settings, availability_rules, stripe_events RESTART IDENTITY CASCADE"
+                "settings, availability_rules, stripe_events, session_reports, codex_logins RESTART IDENTITY CASCADE"
             )
         )
         db.commit()
@@ -188,7 +293,13 @@ def db_clean(migrated_db):
 
 @pytest.fixture
 def fakes():
-    return {"calendar": FakeCalendar(), "mailer": FakeMailer(), "stripe": FakeStripe()}
+    return {
+        "calendar": FakeCalendar(),
+        "mailer": FakeMailer(),
+        "stripe": FakeStripe(),
+        "fireflies": FakeFireflies(),
+        "codex": FakeCodex(),
+    }
 
 
 @pytest.fixture
@@ -201,6 +312,8 @@ def client(db_clean, fakes):
     app.dependency_overrides[deps.get_calendar] = lambda: fakes["calendar"]
     app.dependency_overrides[deps.get_mailer] = lambda: fakes["mailer"]
     app.dependency_overrides[deps.get_stripe] = lambda: fakes["stripe"]
+    app.dependency_overrides[deps.get_fireflies] = lambda: fakes["fireflies"]
+    app.dependency_overrides[deps.get_codex] = lambda: fakes["codex"]
     app.dependency_overrides[deps.get_now] = lambda: NOW
     with TestClient(app) as c:
         yield c

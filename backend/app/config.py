@@ -32,8 +32,30 @@ class Config(BaseSettings):
     # End-of-session job: how often finished sessions are closed and the next-session link emailed. 0 = off.
     follow_up_poll_seconds: int = 60
 
-    # Local demo only: replace Google/Stripe/Gmail with in-memory fakes (see app/dev_fakes.py).
+    # Session reports (app.services.session_reports): Fireflies transcript -> Codex summary -> Gmail draft.
+    # Off unless both the Fireflies key and the codex app-server URL are set.
+    fireflies_api_key: str = ""
+    fireflies_api_url: str = "https://api.fireflies.ai/graphql"
+    # One Fireflies request per poll for all waiting sessions. Free plan (50 requests/day): raise to 1800.
+    fireflies_poll_seconds: int = 300
+    # No transcript after this long: the email is prepared without a summary and the admin is alerted.
+    fireflies_max_wait_hours: int = 6
+    # codex app-server (deploy/codex), reached over the internal Docker network with a shared capability token.
+    codex_app_server_url: str = ""
+    codex_ws_token: str = ""
+    codex_model: str = ""  # empty = the default model of the ChatGPT plan
+    codex_turn_timeout_seconds: int = 600
+    # Summaries and infographics are personal data: erased from the database after this many days. 0 = kept.
+    report_retention_days: int = 90
+
+    # Local demo only: replace Google/Stripe/Gmail/Fireflies/Codex with in-memory fakes (see app/dev_fakes.py).
     fake_integrations: bool = False
+    # Demo only: also write every email as a .eml file in this directory (E2E checks, example drafts).
+    demo_outbox_dir: str = ""
+
+    @property
+    def session_reports_enabled(self) -> bool:
+        return self.fake_integrations or bool(self.fireflies_api_key and self.codex_app_server_url)
 
     @property
     def allowed_product_ids(self) -> set[str]:

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError } from "./api";
+import { api, ApiError, reportImageUrl } from "./api";
 
 function mockFetch(status: number, body: unknown, json = true) {
   const fn = vi.fn().mockResolvedValue({
@@ -104,5 +104,32 @@ describe("api", () => {
       status: 0,
       message: "Connexion impossible. Vérifiez votre connexion internet puis réessayez.",
     });
+  });
+
+  it("session report and Codex endpoints", async () => {
+    const fetch = mockFetch(200, {});
+    const last = () => fetch.mock.lastCall as [string, RequestInit];
+    await api.adminRetryReport(7);
+    expect(last()).toEqual(["/api/admin/reports/7/retry", expect.objectContaining({ method: "POST" })]);
+    await api.adminDraftWithoutSummary(7);
+    expect(last()).toEqual(["/api/admin/reports/7/draft-without-summary", expect.objectContaining({ method: "POST" })]);
+    await api.adminSetReportSettings(true);
+    expect(last()).toEqual([
+      "/api/admin/report-settings",
+      expect.objectContaining({ method: "PATCH", body: '{"send_without_review":true}' }),
+    ]);
+    await api.adminCodexStatus();
+    expect(last()[0]).toBe("/api/admin/codex");
+    expect(last()[1].method).toBeUndefined();
+    await api.adminCodexLogin();
+    expect(last()).toEqual(["/api/admin/codex/login", expect.objectContaining({ method: "POST" })]);
+    await api.adminCodexLoginStatus(3);
+    expect(last()[0]).toBe("/api/admin/codex/login/3");
+    expect(last()[1].method).toBeUndefined();
+    await api.adminCodexCancelLogin(3);
+    expect(last()).toEqual(["/api/admin/codex/login/3/cancel", expect.objectContaining({ method: "POST" })]);
+    await api.adminCodexLogout();
+    expect(last()).toEqual(["/api/admin/codex/logout", expect.objectContaining({ method: "POST" })]);
+    expect(reportImageUrl(12)).toBe("/api/admin/reports/12/image.png");
   });
 });

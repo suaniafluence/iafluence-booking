@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     SmallInteger,
     String,
     Text,
@@ -14,7 +15,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ExcludeConstraint
+from sqlalchemy.dialects.postgresql import JSONB, ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -109,6 +110,78 @@ class Booking(Base):
     )
 
 
+class SessionReport(Base):
+    """Summary of a finished session, written by the Codex agent from the Fireflies transcript.
+
+    waiting_transcript -> summarizing -> ready -> drafted | failed (app.services.session_reports).
+    The transcript itself is never stored: only its Fireflies id, the summary and the infographic.
+    """
+
+    __tablename__ = "session_reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), unique=True)
+    status: Mapped[str] = mapped_column(String(32))
+    # Start of the Fireflies wait window (end of the session, or the last « Relancer »).
+    waiting_since: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    transcript_attempts: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
+    summary_attempts: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
+    # A process summarizing the report holds it until then (Codex turns take minutes: no row lock meanwhile).
+    claimed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fireflies_transcript_id: Mapped[str | None] = mapped_column(String(128))
+    summary: Mapped[dict | None] = mapped_column(JSONB)
+    image_png: Mapped[bytes | None] = mapped_column(LargeBinary)
+    # Short reason shown in the admin — never transcript content.
+    error: Mapped[str | None] = mapped_column(Text)
+    # How the client email went out: draft | sent; with_summary tells whether it carried the summary.
+    delivery: Mapped[str | None] = mapped_column(String(16))
+    with_summary: Mapped[bool | None] = mapped_column(Boolean)
+    drafted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Summary and image erased after REPORT_RETENTION_DAYS.
+    erased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    booking: Mapped[Booking] = relationship()
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('waiting_transcript', 'summarizing', 'ready', 'drafted', 'failed')", name="report_status"
+        ),
+        Index("ix_session_reports_status_next_attempt", "status", "next_attempt_at"),
+    )
+
+
+class CodexLogin(Base):
+    """Device authorization of the codex app-server with the ChatGPT plan (OAuth 2.0, RFC 8628).
+
+    Only what the admin needs to see is stored: the OAuth tokens stay inside the codex container.
+    PENDING -> COMPLETED | EXPIRED | DENIED | CANCELLED | ERROR
+    """
+
+    __tablename__ = "codex_logins"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    login_id: Mapped[str] = mapped_column(String(128))
+    verification_url: Mapped[str] = mapped_column(String(512))
+    # One-time code the admin types on the OpenAI page; blanked once the login is over.
+    user_code: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16))
+    error: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # « Déconnecter » ends the session this login opened.
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'COMPLETED', 'EXPIRED', 'DENIED', 'CANCELLED', 'ERROR')", name="codex_login_status"
+        ),
+    )
+
+
 class CalendarSource(Base):
     __tablename__ = "calendar_sources"
 
@@ -133,6 +206,9 @@ class Settings(Base):
     meet_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     admin_email: Mapped[str] = mapped_column(String(320), default="")
     consultant_name: Mapped[str] = mapped_column(String(255), default="Suan Tay")
+    # Customers on « Envoi auto »: an email carrying a generated summary is still left as a draft for review,
+    # unless this is on.
+    send_reports_without_review: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
 
 
 class AvailabilityRule(Base):

@@ -1,0 +1,31 @@
+Bonjour {{ name }},
+
+Merci pour notre session de conseil IA du {{ date_long }}. Voici son compte rendu.
+{% for title, items in sections %}
+
+{{ title }}
+{% for item in items %}
+- {{ item }}
+{% endfor %}
+{% endfor %}
+{% if image_cid %}
+
+L'infographie de la séance est jointe à cet email.
+{% endif %}
+
+{% if last %}
+Votre accompagnement ({{ hours_purchased_label }} de conseil) est maintenant terminé. Merci pour votre confiance.
+
+Si vous souhaitez poursuivre avec de nouvelles heures de conseil, rendez-vous sur :
+
+{{ shop_url }}
+{% else %}
+Il vous reste {{ hours_remaining_label }} de conseil. Vous pouvez dès maintenant choisir le créneau de votre prochaine session de 1 heure :
+
+{{ booking_url }}
+{% endif %}
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence

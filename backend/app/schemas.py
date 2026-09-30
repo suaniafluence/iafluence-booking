@@ -91,3 +91,7 @@ class CancelBookingIn(BaseModel):
 
 class PurchaseHoursIn(BaseModel):
     hours_purchased: int = Field(ge=0, le=100)
+
+
+class ReportSettingsIn(BaseModel):
+    send_without_review: bool

@@ -98,8 +98,9 @@ activate() {
   guard_legacy_stack
   ln -sfn "$SHARED_ENV" "$RELEASES/$id/deploy/.env"
 
-  log "Building API image $API_IMAGE:$id (runtime dependencies only, current release keeps serving)"
-  compose "$id" build api
+  # Also the codex app-server image when the "codex" profile is on (tagged by Codex version: rebuilt on change only).
+  log "Building images for $id (API: runtime dependencies only; current release keeps serving)"
+  compose "$id" build
 
   log "Switching current -> releases/$id (previous: ${previous:-none})"
   switch_current "$id"

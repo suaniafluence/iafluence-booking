@@ -49,6 +49,9 @@ jobs:
       - name: Check the API image builds
         run: docker build --quiet --tag iafluence-booking-api:ci backend
 
+      - name: Check the codex app-server image builds
+        run: docker build --quiet --tag iafluence-booking-codex:ci deploy/codex
+
       - name: Assemble release archive
         env:
           RELEASE_ID: ${{ steps.meta.outputs.release_id }}
@@ -60,6 +63,7 @@ jobs:
           cp -r backend/alembic backend/app backend/scripts "$out/backend/"
           cp -r frontend/dist "$out/frontend/dist"
           cp deploy/docker-compose.yml deploy/Caddyfile deploy/release.sh "$out/deploy/"
+          cp -r deploy/codex "$out/deploy/codex"
           find "$out" -name __pycache__ -prune -exec rm -rf {} +
           printf 'release=%s\ncommit=%s\nref=%s\nrun=%s/%s/actions/runs/%s\n' \
             "$RELEASE_ID" "$GITHUB_SHA" "$GITHUB_REF_NAME" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > "$out/REVISION"

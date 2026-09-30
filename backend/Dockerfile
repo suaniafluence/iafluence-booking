@@ -15,7 +15,11 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
-RUN useradd --create-home app && mkdir /app && chown app /app
+# Fonts for the session report infographics (SVG rendered to PNG by resvg).
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends fonts-dejavu-core \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --create-home app && mkdir /app && chown app /app
 
 WORKDIR /app
 COPY --from=build --chown=app /app/.venv ./.venv

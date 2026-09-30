@@ -1,4 +1,13 @@
-import type { AdminOverview, BookingConfirmed, BookingContext, Slot } from "../api";
+import type {
+  AdminOverview,
+  BookingConfirmed,
+  BookingContext,
+  CodexLogin,
+  CodexStatus,
+  FinishedSession,
+  SessionReport,
+  Slot,
+} from "../api";
 
 export const context = (over: Partial<BookingContext> = {}): BookingContext => ({
   customer: { name: "Jean Dupont", email: "jean@example.com" },
@@ -92,6 +101,66 @@ export const overview = (over: Partial<AdminOverview> = {}): AdminOverview => ({
       booking: null,
     },
   ],
+  reports: { enabled: true, send_without_review: false, sessions: [] },
+  ...over,
+});
+
+export const synthese = {
+  objectifs: ["Cadrer le projet d'assistant"],
+  points_abordes: ["Cas d'usage prioritaires", "Choix de l'outil"],
+  decisions: [],
+  actions_client: ["Rassembler dix devis"],
+  prochaines_etapes: ["Prototype à la prochaine séance"],
+};
+
+export const sessionReport = (over: Partial<SessionReport> = {}): SessionReport => ({
+  id: 7,
+  status: "drafted",
+  transcript_found: true,
+  transcript_attempts: 2,
+  summary_attempts: 1,
+  next_attempt_at: null,
+  waiting_until: "2026-10-08T21:00:00+02:00",
+  error: null,
+  synthese,
+  has_image: true,
+  delivery: "draft",
+  with_summary: true,
+  drafted_at: "2026-10-08T15:12:00+02:00",
+  erased: false,
+  ...over,
+});
+
+export const finishedSession = (
+  report: SessionReport | null = sessionReport(),
+  over: Partial<FinishedSession> = {},
+): FinishedSession => ({
+  booking_id: 31,
+  customer: "Marie Martin",
+  email: "marie@example.com",
+  product: "Conseil IA - 3h",
+  start: "2026-10-08T14:00:00+02:00",
+  end: "2026-10-08T15:00:00+02:00",
+  report,
+  ...over,
+});
+
+export const codexStatus = (over: Partial<CodexStatus> = {}): CodexStatus => ({
+  state: "disconnected",
+  email: null,
+  plan: null,
+  detail: null,
+  pending_login: null,
+  ...over,
+});
+
+export const codexLogin = (over: Partial<CodexLogin> = {}): CodexLogin => ({
+  id: 3,
+  status: "PENDING",
+  verification_url: "https://auth.openai.com/codex/device",
+  user_code: "ABCD-1234",
+  expires_at: "2026-10-05T06:15:00+00:00",
+  error: null,
   ...over,
 });
 

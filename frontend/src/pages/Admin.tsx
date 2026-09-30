@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, type AdminOverview, type NewClient } from "../api";
+import { CopyButton } from "../components/CopyButton";
 import { Alert, Button, Card, Layout, Spinner } from "../components/Layout";
 import { euros, hm, hours, longDate } from "../format";
+import { CodexConnection } from "./admin/CodexConnection";
+import { SessionReports } from "./admin/SessionReports";
 
 export default function Admin() {
   const [data, setData] = useState<AdminOverview | null>(null);
@@ -120,6 +123,10 @@ function Dashboard({ data, onChange }: { data: AdminOverview; onChange: () => vo
       <Upcoming upcoming={data.upcoming} onChange={onChange} />
 
       <Clients clients={data.clients} onChange={onChange} />
+
+      <SessionReports reports={data.reports} onChange={onChange} />
+
+      <CodexConnection />
     </div>
   );
 }
@@ -295,19 +302,6 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
         </table>
       </div>
     </section>
-  );
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      className="font-medium text-brand-600 underline"
-      onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true), () => {})}
-    >
-      {copied ? "Copié" : "Copier le lien"}
-    </button>
   );
 }
 

@@ -3,6 +3,9 @@
 Runs in the API process every `follow_up_poll_seconds`. Moving a booking from 'confirmed' to 'completed'
 frees the purchase for its next booking (one upcoming session per purchase) and is the idempotency marker:
 each finished session is processed once, even if several processes poll concurrently.
+
+With session reports on (Fireflies + Codex configured), the email is not prepared here: a session report is
+created instead, and app.services.session_reports prepares the email once the summary is written.
 """
 
 import asyncio
@@ -12,9 +15,10 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
+from app.config import get_config
 from app.db import SessionLocal
 from app.models import Booking
-from app.services import notifications
+from app.services import notifications, session_reports
 from app.services.email_service import Mailer
 
 log = logging.getLogger(__name__)
@@ -24,12 +28,15 @@ EMAIL_GRACE = timedelta(hours=24)
 
 
 def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
-    """Close every confirmed session that has ended; return how many follow-up emails were prepared.
+    """Close every confirmed session that has ended; return how many follow-up emails were prepared (or deferred
+    to a session report).
 
     Hours left -> link to book the next session. Last hour used -> thanks, with where to buy more hours.
     """
     to_notify: list[tuple[int, str]] = []
     to_thank: list[int] = []
+    reports = 0
+    with_reports = get_config().session_reports_enabled
     with SessionLocal() as db:
         finished = db.scalars(
             select(Booking)
@@ -45,11 +52,16 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
             if now - booking.end_datetime > EMAIL_GRACE:
                 log.warning("booking %s ended at %s: closed without follow-up email", booking.id, booking.end_datetime)
                 continue
-            if purchase.hours_remaining < 1:
-                to_thank.append(purchase.id)
+            last = purchase.hours_remaining < 1
+            token = None if last else notifications.active_token(db, purchase.id)
+            if not last and token is None:
                 continue
-            token = notifications.active_token(db, purchase.id)
-            if token is not None:
+            if with_reports:
+                session_reports.create_for(db, booking, now)
+                reports += 1
+            elif last:
+                to_thank.append(purchase.id)
+            else:
                 to_notify.append((purchase.id, token))
         db.commit()
     # After the commit: a crash can lose an email, never send it twice.
@@ -57,7 +69,7 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
         notifications.send_next_session_link(mailer, purchase_id, token)
     for purchase_id in to_thank:
         notifications.send_last_session_thanks(mailer, purchase_id)
-    return len(to_notify) + len(to_thank)
+    return len(to_notify) + len(to_thank) + reports
 
 
 async def run_forever(mailer_factory: Callable[[], Mailer], interval_s: float) -> None:
