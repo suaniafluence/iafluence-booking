@@ -67,7 +67,7 @@ def test_add_client_without_email_and_existing_customer_is_reused(client, fakes,
 
 @pytest.mark.parametrize(
     "bad",
-    [{"name": ""}, {"email": "pas-un-email"}, {"hours": 0}, {"hours": 101}, {"amount_cents": -1}, {"product_name": ""}],
+    [{"name": ""}, {"name": "   "}, {"name": "x" * 256}, {"email": "pas-un-email"}, {"hours": 0}, {"hours": 101}, {"amount_cents": -1}, {"product_name": ""}, {"product_name": " 	 "}],
 )
 def test_add_client_validates_input(client, bad):
     login(client)

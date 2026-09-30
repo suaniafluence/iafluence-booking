@@ -177,10 +177,10 @@ def add_client(
     """A client paid outside the website: create the purchase and its booking link by hand."""
     created = manual_purchase.create(
         db,
-        name=body.name.strip(),
+        name=body.name,
         email=str(body.email).lower(),
         hours=body.hours,
-        product_name=body.product_name.strip(),
+        product_name=body.product_name,
         amount_cents=body.amount_cents,
     )
     if body.send_link:
