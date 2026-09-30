@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 
 from app import models  # noqa: F401 — register tables
 from app.config import get_config
-from app.db import Base
+from app.db import CONNECT_TIMEOUT_S, Base
 
 config = context.config
 if config.config_file_name is not None:
@@ -22,7 +22,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     url = config.attributes.get("database_url") or get_config().database_url
-    engine = create_engine(url)
+    engine = create_engine(url, connect_args={"connect_timeout": CONNECT_TIMEOUT_S})
     with engine.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():

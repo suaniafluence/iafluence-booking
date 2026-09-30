@@ -138,6 +138,17 @@ docker compose exec db pg_dump -U iafluence iafluence | gzip > backup-$(date +%F
 
 À planifier en cron quotidien.
 
+**Base PostgreSQL hébergée (Neon, plan gratuit) :**
+
+Au lieu du conteneur `db`, on peut pointer `DATABASE_URL` vers Neon (`postgresql+psycopg://…@….neon.tech/…?sslmode=require`). Le plan gratuit suffit largement pour ce MVP (0,5 Go et 100 CU-heures par projet et par mois).
+
+Le point à surveiller, c'est le réveil. Après 5 min sans requête, la base s'endort (ce n'est pas désactivable en gratuit), et la requête suivante attend quelques centaines de ms. Pour un webhook Stripe, ce n'est pas un problème, car Stripe réessaie. C'est pourquoi le moteur SQLAlchemy (`backend/app/db.py`) est configuré avec :
+
+- `connect_timeout=10` : un timeout de connexion confortable (≥ 5 s) pour laisser le temps à la base de se réveiller ;
+- `pool_pre_ping=True` : les connexions du pool coupées pendant la mise en veille sont détectées et rouvertes automatiquement.
+
+Pour les environnements, préférez une branche Neon par environnement (`main` pour la prod, `dev`, `preview`) plutôt que des projets séparés.
+
 ### Réglages
 
 Les réglages métier sont stockés en base (tables `settings` et `availability_rules`). Pour modifier les horaires, par exemple ajouter une pause déjeuner le mardi :
