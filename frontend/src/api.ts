@@ -64,6 +64,25 @@ export const api = {
     request<{ status: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) }),
   adminLogout: () => request<{ status: string }>("/api/admin/logout", { method: "POST" }),
   adminOverview: () => request<AdminOverview>("/api/admin/overview"),
+  adminAddClient: (client: NewClient) =>
+    request<{ purchase_id: number; booking_url: string }>("/api/admin/clients", {
+      method: "POST",
+      body: JSON.stringify(client),
+    }),
+  adminSetAutoSend: (customerId: number, autoSend: boolean) =>
+    request<{ customer_id: number; auto_send_next_link: boolean }>(`/api/admin/customers/${customerId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ auto_send_next_link: autoSend }),
+    }),
+};
+
+export type NewClient = {
+  name: string;
+  email: string;
+  hours: number;
+  product_name: string;
+  amount_cents: number;
+  send_link: boolean;
 };
 
 export type AdminOverview = {
@@ -79,6 +98,7 @@ export type AdminOverview = {
   upcoming: (BookingInfo & { customer: string; email: string; product: string })[];
   clients: {
     purchase_id: number;
+    customer_id: number;
     name: string;
     email: string;
     product: string;
@@ -86,6 +106,9 @@ export type AdminOverview = {
     hours_booked: number;
     hours_remaining: number;
     payment_status: string;
+    manual: boolean;
+    auto_send_next_link: boolean;
+    booking_url: string | null;
     created_at: string;
     booking: BookingInfo | null;
   }[];

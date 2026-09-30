@@ -30,6 +30,27 @@ def send_booking_link(mailer: Mailer, purchase_id: int, token: str) -> None:
         send_safely(mailer, purchase.customer.email, "Réservez votre première session de conseil IA", body)
 
 
+def send_next_session_link(mailer: Mailer, purchase_id: int, token: str) -> None:
+    with SessionLocal() as db:
+        purchase = db.get(Purchase, purchase_id)
+        settings = get_settings(db)
+        body = render(
+            "next_session_link.txt",
+            name=purchase.customer.name,
+            hours_remaining_label=fmt.hours(purchase.hours_remaining),
+            booking_url=booking_url(token),
+            consultant_name=settings.consultant_name,
+        )
+        customer = purchase.customer
+        send_safely(
+            mailer,
+            customer.email,
+            "Réservez votre prochaine session de conseil IA",
+            body,
+            as_draft=not customer.auto_send_next_link,
+        )
+
+
 def send_booking_confirmations(mailer: Mailer, booking_id: int) -> None:
     with SessionLocal() as db:
         booking = db.get(Booking, booking_id)
@@ -39,6 +60,7 @@ def send_booking_confirmations(mailer: Mailer, booking_id: int) -> None:
 
         customer_body = render(
             "customer_confirmation.txt",
+            first_session=purchase.hours_booked == 1,
             date_long=fmt.long_date(booking.start_datetime, tz),
             hour_range=fmt.hour_range(booking.start_datetime, booking.end_datetime, tz, "h"),
             meet_url=booking.meet_url,

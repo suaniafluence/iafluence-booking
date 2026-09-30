@@ -53,12 +53,43 @@ describe("Reservation", () => {
     expect(api.availability).not.toHaveBeenCalled();
   });
 
-  it("never shows negative remaining hours", async () => {
+  it("says so when every hour has been used", async () => {
     vi.mocked(api.context).mockResolvedValue(
-      context({ purchase: { product_name: "x", hours_purchased: 1, hours_booked: 1, hours_remaining: 0 } }),
+      context({ purchase: { product_name: "x", hours_purchased: 3, hours_booked: 3, hours_remaining: 0 } }),
     );
     renderAt();
-    await screen.findByRole("heading", { name: "Votre conseil IA est confirmé" });
+    expect(await screen.findByRole("heading", { name: "Toutes vos heures ont été utilisées" })).toBeInTheDocument();
+    expect(screen.getByText(/répondez simplement à l’un de nos emails/)).toBeInTheDocument();
+    expect(summary()).toEqual({ "Heures achetées": "3 h", "Heures restantes": "0 h" });
+    expect(screen.queryByRole("button", { name: "Choisir mon créneau" })).not.toBeInTheDocument();
+  });
+
+  it("offers the next session once the previous one is over", async () => {
+    vi.mocked(api.context).mockResolvedValue(
+      context({ purchase: { product_name: "x", hours_purchased: 5, hours_booked: 2, hours_remaining: 3 } }),
+    );
+    const user = userEvent.setup();
+    renderAt();
+    expect(await screen.findByRole("heading", { name: "Réservez votre prochaine session" })).toBeInTheDocument();
+    expect(screen.getByText("Conseil IA", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText("Choisissez le créneau de votre prochaine session de conseil de 1 heure.")).toBeInTheDocument();
+    expect(screen.queryByText("Votre paiement a bien été reçu.")).not.toBeInTheDocument();
+    expect(summary()).toEqual({
+      Prestation: "Conseil IA",
+      "Heures achetées": "5 h",
+      "Prochaine session": "1 h",
+      "Heures restantes après cette session": "2 h",
+    });
+    await user.click(screen.getByRole("button", { name: "Choisir mon créneau" }));
+    expect(await screen.findByRole("heading", { name: "Choisissez votre créneau" })).toBeInTheDocument();
+  });
+
+  it("offers the last hour as the next session", async () => {
+    vi.mocked(api.context).mockResolvedValue(
+      context({ purchase: { product_name: "x", hours_purchased: 2, hours_booked: 1, hours_remaining: 1 } }),
+    );
+    renderAt();
+    await screen.findByRole("heading", { name: "Réservez votre prochaine session" });
     expect(summary()["Heures restantes après cette session"]).toBe("0 h");
   });
 
@@ -82,7 +113,7 @@ describe("Reservation", () => {
     expect(screen.getByText("14:00 - 15:00 · Conseil IA avec Suan Tay")).toBeInTheDocument();
     expect(within(heading.closest("section")!).queryByRole("link")).not.toBeInTheDocument();
     expect(summary()).toEqual({ "Heures achetées": "1 h", "Heures planifiées": "1 h", "Heures restantes": "0 h" });
-    expect(screen.queryByText(/séances suivantes/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/séance suivante/)).not.toBeInTheDocument();
   });
 
   it("groups slots by day and switches days", async () => {
@@ -161,7 +192,9 @@ describe("Reservation", () => {
     expect(meet).toHaveAttribute("target", "_blank");
     expect(meet).toHaveAttribute("rel", "noreferrer");
     expect(summary()).toEqual({ "Heures achetées": "5 h", "Heures planifiées": "1 h", "Heures restantes": "4 h" });
-    expect(screen.getByText(/séances suivantes seront planifiées/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Un lien pour réserver la séance suivante vous sera envoyé par email après cette session."),
+    ).toBeInTheDocument();
   });
 
   it("goes back to the picker without booking", async () => {
@@ -215,7 +248,7 @@ describe("Reservation", () => {
     const done = await screen.findByRole("heading", { name: "Rendez-vous confirmé" });
     const card = done.closest("section")!;
     expect(within(card).queryByRole("link")).not.toBeInTheDocument();
-    expect(screen.queryByText(/séances suivantes/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/séance suivante/)).not.toBeInTheDocument();
   });
 
   it("reloads everything when another booking link is opened", async () => {

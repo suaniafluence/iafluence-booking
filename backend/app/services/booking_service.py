@@ -58,7 +58,7 @@ class BookedSlot:
 
 
 class AlreadyBooked(BookingError):
-    status_code, code, message = 409, "already_booked", "Votre première session est déjà réservée."
+    status_code, code, message = 409, "already_booked", "Votre prochaine session est déjà réservée."
 
     def __init__(self, booking: Booking):
         super().__init__()

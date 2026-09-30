@@ -528,7 +528,8 @@ def test_booking_emails_full_content(client, fakes, token_for):
         "Date :\nJeudi 8 octobre 2026\n\nHoraire :\n14h00 - 15h00\n"
         "Lien visio :\nhttps://meet.google.com/abc-defg-hij\n"
         "Vous avez acheté :\n3 heures de conseil\n\n"
-        "Après cette première session :\n2 heures resteront à programmer.\n\n"
+        "Après cette première session :\n2 heures resteront à programmer.\n"
+        "Un lien pour réserver la séance suivante vous sera envoyé par email après cette session.\n\n"
         "Une invitation calendrier vous a également été envoyée.\n\nÀ bientôt,\n\nSuan Tay\nIAfluence\n"
     )
     admin = mails["NOUVELLE RÉSERVATION — Conseil IA"]

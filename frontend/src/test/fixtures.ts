@@ -59,6 +59,7 @@ export const overview = (over: Partial<AdminOverview> = {}): AdminOverview => ({
   clients: [
     {
       purchase_id: 1,
+      customer_id: 10,
       name: "Jean Dupont",
       email: "jean@example.com",
       product: "Conseil IA - 5h",
@@ -66,11 +67,15 @@ export const overview = (over: Partial<AdminOverview> = {}): AdminOverview => ({
       hours_booked: 1,
       hours_remaining: 4,
       payment_status: "paid",
+      manual: false,
+      auto_send_next_link: true,
+      booking_url: "https://booking.test/reservation/tokJ",
       created_at: "2026-10-02T12:00:00+02:00",
       booking: { start: "2026-10-08T14:00:00+02:00", end: "2026-10-08T15:00:00+02:00", meet_url: null },
     },
     {
       purchase_id: 2,
+      customer_id: 11,
       name: "Paul Rembourse",
       email: "paul@example.com",
       product: "Conseil IA - 1h",
@@ -78,6 +83,9 @@ export const overview = (over: Partial<AdminOverview> = {}): AdminOverview => ({
       hours_booked: 0,
       hours_remaining: 1,
       payment_status: "refunded",
+      manual: true,
+      auto_send_next_link: false,
+      booking_url: null,
       created_at: "2026-10-01T12:00:00+02:00",
       booking: null,
     },

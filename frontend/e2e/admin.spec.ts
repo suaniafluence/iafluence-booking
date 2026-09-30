@@ -32,12 +32,34 @@ test("l'administrateur se connecte, suit les clients et se déconnecte", async (
     "1 h",
     "1 h",
     /^\p{Lu}\p{Ll}+ \d{1,2} \p{Ll}+ \d{4} · \d\d:\d\d$/u,
+    "",
+    "Copier le lien",
   ]);
   await expect(page.getByRole("listitem").filter({ hasText: customerName(who) })).toBeVisible();
+
+  // Next-session link: drafted by default, sent automatically once ticked — the choice is saved.
+  const autoSend = page.getByRole("checkbox", { name: `Envoi automatique pour ${customerName(who)}` });
+  await expect(autoSend).not.toBeChecked();
+  await autoSend.check();
+  await expect(autoSend).toBeChecked();
+
+  // A client who paid outside the website, added by hand.
+  const manual = newCustomer();
+  await page.getByRole("button", { name: "Ajouter un client" }).click();
+  await page.getByLabel("Nom").fill(customerName(manual));
+  await page.getByLabel("Email", { exact: true }).fill(customerEmail(manual));
+  await page.getByLabel("Heures achetées").fill("3");
+  await page.getByLabel("Montant payé (€)").fill("300");
+  await page.getByRole("button", { name: "Ajouter le client" }).click();
+  await expect(page.getByRole("alert")).toContainText("Client ajouté. Lien de réservation : http");
+  const manualRow = page.getByRole("row").filter({ hasText: customerEmail(manual) });
+  await expect(manualRow.getByRole("cell").nth(1)).toHaveText("Conseil IAmanuel");
+  await expect(manualRow.getByRole("cell").nth(2)).toHaveText("3 h");
 
   // The session cookie survives a reload.
   await page.reload();
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
+  await expect(autoSend).toBeChecked();
 
   await page.getByRole("button", { name: "Déconnexion" }).click();
   await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();

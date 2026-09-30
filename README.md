@@ -24,7 +24,7 @@
 ![Couverture](https://img.shields.io/badge/couverture-%E2%89%A5_80_%25-brightgreen)
 ![Mutation](https://img.shields.io/badge/mutation_(Stryker)-%E2%89%A5_75_%25-brightgreen)
 
-Réservation de la **première session de 1 h** après l’achat d’une prestation « Conseil IA » sur Stripe.
+Réservation des **sessions de 1 h** après l’achat d’une prestation « Conseil IA » sur Stripe (ou d’un client ajouté à la main) : la première tout de suite, les suivantes via un lien envoyé après chaque session.
 
 Paiement Stripe → vérification → lien de réservation sécurisé → créneaux libres agrégés depuis plusieurs Google Calendars (free/busy uniquement) → création de l’événement Google Calendar + Meet + invitation → emails client et admin → suivi des heures achetées / réservées / restantes.
 
@@ -46,8 +46,9 @@ deploy/     Docker Compose · Caddy (derrière le nginx du serveur) · .env.exam
 | Règles | Horaires hebdomadaires (plusieurs plages par jour possibles), durée 60 min, tampons 15 min avant/après, préavis 24 h, horizon 30 jours, fuseau `Europe/Paris` (changements d’heure gérés). |
 | Réservation | Verrou transactionnel PostgreSQL + nouvelle requête free/busy (sans cache) juste avant la création de l’événement. En base, un index unique (une session par achat) et une contrainte d’exclusion (aucun chevauchement) empêchent toute double réservation. |
 | Google Calendar | Événement « Conseil IA - Nom » dans le calendrier dédié, avec le client en invité (`sendUpdates=all` : Google envoie l’invitation à n’importe quelle adresse) et un lien Meet optionnel. |
-| Emails | Envoyés via l’API Gmail : lien de réservation, confirmation client, notification « NOUVELLE RÉSERVATION », alerte remboursement. |
-| Admin | `/admin` (mot de passe unique) : indicateurs du mois, heures vendues/réalisées/restantes, prochains rendez-vous, liste des clients. |
+| Séances suivantes | Chaque minute, l’API clôt les sessions terminées (`confirmed` → `completed`), ce qui libère l’achat pour la réservation suivante. S’il reste des heures, l’email « Réservez votre prochaine session » (même lien) est **mis en brouillon dans Gmail** — pour y ajouter le compte rendu avant de l’envoyer — ou **envoyé directement** si « Envoi auto » est coché pour ce client dans l’admin. Une session terminée depuis plus de 24 h (API arrêtée, premier déploiement) est clôturée sans email. |
+| Emails | Envoyés via l’API Gmail : lien de réservation, confirmation client, lien de la session suivante (brouillon ou envoi), notification « NOUVELLE RÉSERVATION », alerte remboursement. |
+| Admin | `/admin` (mot de passe unique) : indicateurs du mois, heures vendues/réalisées/restantes, prochains rendez-vous, liste des clients avec la case « Envoi auto » et le lien de réservation à copier, **ajout d’un client à la main** (payé hors du site : nom, email, heures, montant, envoi ou non du lien). |
 
 ## Démarrage local (démo sans Google ni Stripe)
 
@@ -151,6 +152,7 @@ npm run test:e2e                  # E2E_DATABASE_URL, UV (chemin de uv) et PW_CH
    uv run python -m scripts.google_oauth_init chemin/vers/client_secret.json
    ```
    Copier les trois valeurs affichées dans `deploy/.env`.
+   ⚠️ Les brouillons Gmail demandent le droit `gmail.compose`. Un refresh token obtenu avant son ajout continue de fonctionner pour l’agenda et l’envoi d’emails, mais pas pour les brouillons : relancer cette commande et remplacer `GOOGLE_REFRESH_TOKEN`.
 5. Créer dans Google Calendar un agenda **« IAfluence - Conseil clients »**. Son ID se trouve dans *Paramètres de l’agenda → Intégrer l’agenda*.
 6. Les agendas d’autres comptes (Formation, ESC Clermont, Personnel…) doivent être **partagés avec votre compte Gmail**, au minimum avec le droit « Voir uniquement les informations de disponibilité ». C’est suffisant pour free/busy et cohérent avec l’exigence de confidentialité.
    Les agendas Outlook/Exchange ne sont pas pris en charge dans ce MVP.
@@ -276,7 +278,9 @@ UPDATE settings SET buffer_before_min = 15, buffer_after_min = 15, minimum_notic
 | POST | `/api/bookings` `{token, start}` | Crée le rendez-vous. Codes : 201 ; 409 `slot_taken` / `already_booked` ; 422 créneau non proposé ; 503 agenda indisponible |
 | POST | `/webhooks/stripe` | Webhook signé |
 | POST/GET | `/api/admin/login`, `/api/admin/overview` | Administration |
+| POST | `/api/admin/clients` `{name, email, hours, product_name, amount_cents, send_link}` | Ajoute un client payé hors du site, renvoie `{purchase_id, booking_url}` |
+| PATCH | `/api/admin/customers/{id}` `{auto_send_next_link}` | Lien de la session suivante : envoi automatique ou brouillon |
 
 ## Hors MVP (évolutions prévues)
 
-Modification ou annulation de rendez-vous, réservation des heures suivantes (le verrou « une session par achat » est un index unique à assouplir), rappels, portail client, interface d’édition des réglages.
+Modification ou annulation de rendez-vous, rappels, portail client, interface d’édition des réglages.

@@ -27,6 +27,9 @@ class Config(BaseSettings):
     session_secret: str = "change-me"
     cookie_secure: bool = True
 
+    # End-of-session job: how often finished sessions are closed and the next-session link emailed. 0 = off.
+    follow_up_poll_seconds: int = 60
+
     # Local demo only: replace Google/Stripe/Gmail with in-memory fakes (see app/dev_fakes.py).
     fake_integrations: bool = False
 

@@ -1,0 +1,12 @@
+Bonjour {{ name }},
+
+Merci pour notre session de conseil IA.
+
+Il vous reste {{ hours_remaining_label }} de conseil. Vous pouvez dès maintenant choisir le créneau de votre prochaine session de 1 heure :
+
+{{ booking_url }}
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence

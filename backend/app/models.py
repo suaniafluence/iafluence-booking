@@ -26,6 +26,8 @@ class Customer(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
     email: Mapped[str] = mapped_column(String(320), unique=True)
+    # End of session: send the next-session link directly, or leave it as a Gmail draft (default) to add notes.
+    auto_send_next_link: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     purchases: Mapped[list["Purchase"]] = relationship(back_populates="customer")
@@ -81,7 +83,8 @@ class Booking(Base):
     end_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     google_event_id: Mapped[str | None] = mapped_column(String(255))
     meet_url: Mapped[str | None] = mapped_column(String(512))
-    status: Mapped[str] = mapped_column(String(32))  # confirmed | cancelled
+    # confirmed (upcoming) -> completed once it has ended (app.services.follow_up) | cancelled
+    status: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     purchase: Mapped[Purchase] = relationship(back_populates="bookings")
@@ -89,7 +92,7 @@ class Booking(Base):
 
     __table_args__ = (
         CheckConstraint("start_datetime < end_datetime", name="booking_interval_order"),
-        # R03 — one initial session per purchase (MVP).
+        # R03 — one upcoming session per purchase: finished ones move to 'completed', freeing the next.
         Index(
             "uq_bookings_one_confirmed_per_purchase",
             "purchase_id",
