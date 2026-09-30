@@ -1,11 +1,10 @@
-# Tests run on every push to main and every pull request.
+# Tests run on pull requests targeting main (not again after the merge).
 # Also called by deploy-prod.yml: nothing is built or deployed unless this passes.
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+    branches: [main]
   workflow_call:
 
 permissions:
