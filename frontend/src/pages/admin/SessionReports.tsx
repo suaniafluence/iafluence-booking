@@ -53,7 +53,8 @@ function details(r: SessionReport): string | null {
     parts.push(`abandon à ${hm(r.waiting_until)}`);
     return parts.join(" · ");
   }
-  if (r.status === "drafted" && r.drafted_at) return `Préparé le ${longDate(r.drafted_at)} à ${hm(r.drafted_at)}`;
+  if (r.status === "drafted" && r.drafted_at)
+    return `Préparé le ${longDate(r.drafted_at).toLowerCase()} à ${hm(r.drafted_at)}`;
   if (r.summary_attempts > 0 && r.status !== "summarizing") return `${r.summary_attempts} tentative(s) de résumé`;
   return null;
 }

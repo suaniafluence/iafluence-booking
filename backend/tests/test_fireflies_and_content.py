@@ -259,7 +259,7 @@ def test_demo_infographic_renders():
 
     svg = demo_infographic(2, "Marie <Martin> & Co", SYNTHESE | {"points_abordes": ["x" * 80]})
     check_svg(svg)
-    assert "Marie &lt;Martin&gt; &amp; Co" in svg and "x" * 33 + "…" in svg
+    assert "Marie &lt;Martin&gt; &amp; Co" in svg and ">• " + "x" * 34 + "<" in svg
     assert png_size(render_png(svg)) == (1200, 800)
 
 

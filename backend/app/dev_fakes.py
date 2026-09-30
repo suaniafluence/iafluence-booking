@@ -179,6 +179,7 @@ class DemoCodex:
 
 
 def demo_infographic(number: int, client: str, synthese: dict) -> str:
+    from textwrap import wrap
     from xml.sax.saxutils import escape
 
     blocks = [
@@ -201,11 +202,11 @@ def demo_infographic(number: int, client: str, synthese: dict) -> str:
             f'<text x="{x + 30}" y="{y + 55}" font-family="DejaVu Sans, sans-serif" font-size="30" '
             f'font-weight="bold" fill="#4338ca">{escape(title)}</text>'
         )
-        for j, item in enumerate(items[:3]):
-            line = item if len(item) <= 34 else item[:33] + "…"
+        lines = [line for item in items[:2] for line in wrap(f"• {item}", 36, max_lines=2, placeholder=" …")]
+        for j, line in enumerate(lines[:4]):
             parts.append(
-                f'<text x="{x + 30}" y="{y + 110 + j * 50}" font-family="DejaVu Sans, sans-serif" font-size="24" '
-                f'fill="#1e1b4b">• {escape(line)}</text>'
+                f'<text x="{x + 30}" y="{y + 105 + j * 38}" font-family="DejaVu Sans, sans-serif" font-size="22" '
+                f'fill="#1e1b4b">{escape(line)}</text>'
             )
     parts.append("</svg>")
     return "".join(parts)

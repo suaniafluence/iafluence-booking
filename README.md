@@ -26,12 +26,12 @@
 
 Réservation des **sessions de 1 h** après l’achat d’une prestation « Conseil IA » sur Stripe (ou d’un client ajouté à la main) : la première tout de suite, les suivantes via un lien envoyé après chaque session.
 
-Paiement Stripe → vérification → lien de réservation sécurisé → créneaux libres agrégés depuis plusieurs Google Calendars (free/busy uniquement) → création de l’événement Google Calendar + Meet + invitation → emails client et admin → suivi des heures achetées / réservées / restantes.
+Paiement Stripe → vérification → lien de réservation sécurisé → créneaux libres agrégés depuis plusieurs Google Calendars (free/busy uniquement) → création de l’événement Google Calendar + Meet + invitation → emails client et admin → suivi des heures achetées / réservées / restantes → après chaque séance, **compte rendu rédigé par votre agent Codex à partir de la transcription Fireflies**, préparé en brouillon Gmail.
 
 ```
 backend/    FastAPI · SQLAlchemy · Alembic · PostgreSQL
 frontend/   React · Vite · TypeScript · Tailwind
-deploy/     Docker Compose · Caddy (derrière le nginx du serveur) · .env.example · release.sh (déploiement / rollback)
+deploy/     Docker Compose · Caddy (derrière le nginx du serveur) · codex app-server · .env.example · release.sh (déploiement / rollback)
 .github/    CI (tests) · Deploy Production (manuel)
 ```
 
@@ -46,9 +46,12 @@ deploy/     Docker Compose · Caddy (derrière le nginx du serveur) · .env.exam
 | Règles | Horaires hebdomadaires (plusieurs plages par jour possibles), durée 60 min, tampons 15 min avant/après, préavis 24 h, horizon 30 jours, fuseau `Europe/Paris` (changements d’heure gérés). |
 | Réservation | Verrou transactionnel PostgreSQL + nouvelle requête free/busy (sans cache) juste avant la création de l’événement. En base, un index unique (une session par achat) et une contrainte d’exclusion (aucun chevauchement) empêchent toute double réservation. |
 | Google Calendar | Événement « Conseil IA - Nom » dans le calendrier dédié, avec le client en invité (`sendUpdates=all` : Google envoie l’invitation à n’importe quelle adresse) et un lien Meet optionnel. |
-| Séances suivantes | Chaque minute, l’API clôt les sessions terminées (`confirmed` → `completed`), ce qui libère l’achat pour la réservation suivante. S’il reste des heures, l’email « Réservez votre prochaine session » (même lien) est **mis en brouillon dans Gmail** — pour y ajouter le compte rendu avant de l’envoyer — ou **envoyé directement** si « Envoi auto » est coché pour ce client dans l’admin. Après la dernière heure, même règle pour l’email « Merci pour votre accompagnement », qui renvoie vers `SHOP_URL` (https://iafluence.fr par défaut) pour racheter des heures. Rien pour un achat remboursé ; une session terminée depuis plus de 24 h (API arrêtée, premier déploiement) est clôturée sans email. |
-| Emails | Envoyés via l’API Gmail : lien de réservation, confirmation client, lien de la session suivante ou remerciement après la dernière heure (brouillon ou envoi), notification « NOUVELLE RÉSERVATION », alerte remboursement. |
-| Admin | `/admin` (mot de passe unique) : indicateurs du mois, heures vendues/réalisées/restantes, prochains rendez-vous, liste des clients avec la case « Envoi auto » et le lien de réservation à copier, **ajout d’un client à la main** (payé hors du site : nom, email, heures, montant, envoi ou non du lien), **annulation d’une séance à venir** (déplacement : l’événement Google est supprimé, l’heure recréditée et le lien renvoyé au client si coché) et **modification des heures achetées** (remboursement partiel, heures supplémentaires ; jamais sous les heures déjà réservées). |
+| Séances suivantes | Chaque minute, l’API clôt les sessions terminées (`confirmed` → `completed`), ce qui libère l’achat pour la réservation suivante. S’il reste des heures, l’email « Réservez votre prochaine session » (même lien) est **mis en brouillon dans Gmail** — avec le compte rendu de la séance si Fireflies et Codex sont configurés (voir « Comptes rendus ») — ou **envoyé directement** si « Envoi auto » est coché pour ce client dans l’admin. Après la dernière heure, même règle pour l’email « Merci pour votre accompagnement », qui renvoie vers `SHOP_URL` (https://iafluence.fr par défaut) pour racheter des heures. Rien pour un achat remboursé ; une session terminée depuis plus de 24 h (API arrêtée, premier déploiement) est clôturée sans email. |
+| Comptes rendus | Si Fireflies et Codex sont configurés, la fin de séance crée un **compte rendu** au lieu de préparer l’email tout de suite : `waiting_transcript → summarizing → ready → drafted`, ou `failed`. Toutes les 5 min (`FIREFLIES_POLL_SECONDS`), **une seule requête** Fireflies liste les enregistrements de toutes les séances en attente ; la séance est reconnue par son heure de début (± 15 min) et l’email du client parmi les participants, ou son lien Meet. La transcription est lue une fois, en mémoire, et envoyée à **votre agent Codex** (`codex app-server`, forfait ChatGPT, aucune clé OpenAI) avec le contexte (client, prestation, n° de séance, heures restantes). Ses consignes sont les fichiers Markdown de `backend/app/codex_agent/` (à réécrire librement). Il renvoie un JSON strict, validé par un schéma pydantic : la synthèse (objectifs, points abordés, décisions, actions du client, prochaines étapes) et une **infographie SVG**, vérifiée (ni script, ni lien, ni ressource externe) puis convertie en PNG 1200 px par le serveur. Sortie invalide → une nouvelle tentative, puis `failed` + alerte admin. Pas de transcription au bout de 6 h (`FIREFLIES_MAX_WAIT_HOURS`) → email V1 sans résumé + alerte admin. |
+| Email avec compte rendu | Multipart : texte + HTML, infographie intégrée (`cid:`), synthèse, puis le lien de la séance suivante (ou le remerciement et `SHOP_URL` après la dernière heure). **Toujours en brouillon** quand il contient un résumé généré, même pour un client en « Envoi auto », sauf si « Envoyer aussi les résumés sans relecture » est coché dans l’admin. Un seul compte rendu et un seul brouillon par séance, même avec plusieurs processus (`FOR UPDATE SKIP LOCKED`, réservation du compte rendu le temps du tour Codex, emails après le commit). |
+| Données personnelles | La transcription n’est **jamais stockée ni journalisée** : seuls l’identifiant Fireflies, la synthèse et le PNG sont en base, effacés après `REPORT_RETENTION_DAYS` (90 jours par défaut). Côté Codex, les conversations sont éphémères et l’historique désactivé. |
+| Emails | Envoyés via l’API Gmail : lien de réservation, confirmation client, lien de la session suivante ou remerciement après la dernière heure (brouillon ou envoi, avec ou sans compte rendu), notification « NOUVELLE RÉSERVATION », alertes remboursement et compte rendu. |
+| Admin | `/admin` (mot de passe unique) : indicateurs du mois, heures vendues/réalisées/restantes, prochains rendez-vous, liste des clients avec la case « Envoi auto » et le lien de réservation à copier, **ajout d’un client à la main** (payé hors du site : nom, email, heures, montant, envoi ou non du lien), **annulation d’une séance à venir** (déplacement : l’événement Google est supprimé, l’heure recréditée et le lien renvoyé au client si coché) et **modification des heures achetées** (remboursement partiel, heures supplémentaires ; jamais sous les heures déjà réservées). **Comptes rendus de séance** : statut de chaque séance terminée, aperçu de la synthèse et de l’infographie, boutons « Relancer » (Fireflies ou résumé) et « Créer le brouillon sans résumé », option « Envoyer aussi les résumés sans relecture ». **Connexion Codex** : voir « Mise en production », étape 4. |
 | Annulations | Règle affichée au client (page de réservation et email de confirmation) : toute séance réservée est due ; déplacement gratuit jusqu’à 24 h avant en répondant à l’email de confirmation ; au-delà, ou en cas d’absence, l’heure est consommée. Un remboursement ne se fait que dans Stripe : total → lien révoqué et alerte admin ; partiel → accès conservé, ajuster les heures dans l’admin. |
 
 ## Schémas
@@ -99,7 +102,7 @@ npm run dev
 ```
 
 Avec `FAKE_INTEGRATIONS=true`, toute session `cs_demo_<heures>h_<nom>` est un paiement valide, par exemple
-http://localhost:5173/reservation?session_id=cs_demo_5h_jean. Les calendriers contiennent quelques créneaux occupés fictifs et les emails s’affichent dans les logs.
+http://localhost:5173/reservation?session_id=cs_demo_5h_jean. Les calendriers contiennent quelques créneaux occupés fictifs et les emails s’affichent dans les logs (et sont enregistrés en `.eml` si `DEMO_OUTBOX_DIR` est défini). Fireflies a un enregistrement de chaque séance, « Connecter Codex » est validé tout seul après 4 s et l’agent de démo écrit un compte rendu à partir du contexte de la séance.
 
 > Sur un poste où un antivirus ou un proxy intercepte le TLS, ajoutez `--system-certs` aux commandes `uv` si l’installation échoue avec `invalid peer certificate`.
 
@@ -145,7 +148,7 @@ cd frontend && npm run test:mutation        # ~3 min
 
 `mutmut` ne fonctionne pas sous Windows (il utilise `fork()`) : `mutation.sh` le lance dans un conteneur Linux, sur une copie du code, avec la base `iafluence_mutation` (variable `MUTATION_DATABASE_URL` pour en changer). Rapports : `backend/mutation-report/` (liste et diff des mutants survivants) et `frontend/reports/mutation/index.html`. Les lignes de log, les modèles déclaratifs et les faux de démo ne sont pas mutés.
 
-**End-to-end** — Playwright démarre le vrai backend (mode `FAKE_INTEGRATIONS`, base `iafluence_e2e` remise à zéro à chaque exécution) et le build de production du frontend, puis pilote un navigateur : du retour Stripe au rendez-vous confirmé (bureau et mobile), deux clients sur le même créneau, liens invalides, administration.
+**End-to-end** — Playwright démarre le vrai backend (mode `FAKE_INTEGRATIONS`, base `iafluence_e2e` remise à zéro à chaque exécution, tâches de fin de séance chaque seconde) et le build de production du frontend, puis pilote un navigateur : du retour Stripe au rendez-vous confirmé (bureau et mobile), deux clients sur le même créneau, liens invalides, administration, connexion Codex par code appareil, et **séance terminée → brouillon Gmail avec synthèse et infographie** (le brouillon `.eml` est relu : texte + HTML + PNG `cid:`).
 
 ```bash
 cd frontend
@@ -272,6 +275,25 @@ Le point à surveiller, c'est le réveil. Après 5 min sans requête, la base s'
 
 Pour les environnements, préférez une branche Neon par environnement (`main` pour la prod, `dev`, `preview`) plutôt que des projets séparés.
 
+### 4. Comptes rendus de séance (Fireflies + Codex)
+
+Facultatif : sans ces réglages, l’email de fin de séance reste celui de la V1.
+
+1. **Fireflies** : *Settings → Developer settings* → copier la clé API dans `FIREFLIES_API_KEY`. L’API est incluse dans tous les forfaits, avec un quota : **Free 50 requêtes/jour**, Pro 500/jour, Business 60/min. Une requête liste les enregistrements de toutes les séances en attente, puis une requête lit la transcription trouvée. Avec le forfait Free, passer `FIREFLIES_POLL_SECONDS=1800` (une vérification toutes les 30 min, 12 au plus par séance). L’enregistreur Fireflies doit rejoindre les réunions Meet et le client doit y figurer comme participant (invitation Google Agenda) ; sinon la séance est reconnue par son lien Meet.
+2. **Service Codex** : dans `shared/.env`, ajouter `codex` à `COMPOSE_PROFILES` (`localdb,codex`, ou `codex` avec Neon), puis :
+   ```dotenv
+   CODEX_APP_SERVER_URL=ws://codex:4500
+   CODEX_WS_TOKEN=...            # openssl rand -hex 32
+   ```
+   Au déploiement suivant, `release.sh` construit l’image `deploy/codex` (Node + `@openai/codex`, version fixée par `CODEX_VERSION`) et démarre `codex app-server`. Il n’écoute que sur le réseau Docker interne, exige ce jeton, et ses outils (shell, web, navigateur, images, extensions) sont désactivés : l’agent ne fait qu’écrire, une transcription ne peut rien lui faire exécuter.
+3. **Connexion Codex** : dans `/admin` → *Connexion Codex* → **Connecter Codex**. Ouvrir `https://auth.openai.com/codex/device` (bouton « Ouvrir OpenAI » ou « Copier »), se connecter à ChatGPT et saisir le code affiché (ex. `ABCD-1234`). La page vérifie toutes les 3 s et passe seule à « Connecté » (flux d’autorisation d’appareil OAuth 2.0, RFC 8628 : `PENDING → COMPLETED`, ou `EXPIRED` au bout de 15 min, `DENIED`, `CANCELLED`, `ERROR`). Les appels de modèle utilisent ensuite le quota de votre forfait ChatGPT. Les jetons OAuth restent dans le volume `codex-home` du conteneur `codex` : ils ne passent jamais par l’API, le navigateur ni les logs. « Connexion expirée » s’affiche si la session ChatGPT prend fin ; « Déconnecter » la ferme.
+4. **L’agent** : ses consignes sont `backend/app/codex_agent/*.md` (concaténés par ordre alphabétique). Vous pouvez les réécrire avec Claude ou ChatGPT et en ajouter ; seul le format de sortie (dernière section d’`AGENTS.md`) doit rester identique. Un changement est pris en compte au déploiement suivant.
+5. **Vérifier** : terminer une séance de test enregistrée par Fireflies ; en 5 à 15 min, l’admin affiche « Brouillon créé avec compte rendu » et le brouillon apparaît dans Gmail.
+
+> ⚠️ **Conditions d’utilisation OpenAI** : un usage automatisé, côté serveur, de Codex avec un forfait ChatGPT (et non une clé API) doit être autorisé par les conditions en vigueur de votre forfait. À vérifier avant la mise en production ; sinon, repasser à une clé API OpenAI côté `codex app-server` (l’application n’a pas à changer).
+
+Paramètres facultatifs : `FIREFLIES_MAX_WAIT_HOURS` (6), `CODEX_MODEL` (vide = modèle par défaut du forfait), `CODEX_TURN_TIMEOUT_SECONDS` (600), `REPORT_RETENTION_DAYS` (90 ; 0 = conservés). Mettez à jour votre registre des traitements RGPD : Fireflies et OpenAI traitent le contenu des séances.
+
 ### Réglages
 
 Les réglages métier sont stockés en base (tables `settings` et `availability_rules`). Pour modifier les horaires, par exemple ajouter une pause déjeuner le mardi :
@@ -297,7 +319,16 @@ UPDATE settings SET buffer_before_min = 15, buffer_after_min = 15, minimum_notic
 | PATCH | `/api/admin/customers/{id}` `{auto_send_next_link}` | Lien de la session suivante : envoi automatique ou brouillon |
 | POST | `/api/admin/bookings/{id}/cancel` `{notify}` | Annule une séance à venir, recrédite l’heure. 409 `not_cancellable` ; 502 `calendar_delete_failed` (rien n’est modifié) |
 | PATCH | `/api/admin/purchases/{id}` `{hours_purchased}` | Ajuste les heures d’un achat (422 si inférieur aux heures réservées) |
+| GET | `/api/admin/overview` → `reports` | `{enabled, send_without_review, sessions: [{booking_id, customer, start, …, report: {id, status, transcript_attempts, summary_attempts, error, synthese, has_image, delivery, with_summary, …} \| null}]}` |
+| GET | `/api/admin/reports/{id}/image.png` | Infographie du compte rendu (admin uniquement, non mise en cache) |
+| POST | `/api/admin/reports/{id}/retry` | « Relancer » : nouveau résumé si la transcription a été trouvée, sinon 6 h de recherche Fireflies de plus. 409 si un brouillon existe déjà ou si un résumé est en cours |
+| POST | `/api/admin/reports/{id}/draft-without-summary` | Email V1, toujours en brouillon. 409 si déjà préparé, achat remboursé ou lien révoqué |
+| PATCH | `/api/admin/report-settings` `{send_without_review}` | Envoi direct des emails avec résumé pour les clients en « Envoi auto » |
+| GET | `/api/admin/codex` | `{state: connected \| expired \| disconnected \| unavailable \| not_configured, email, plan, detail, pending_login}` — jamais de jeton |
+| POST | `/api/admin/codex/login` | Démarre la connexion par code appareil : `{id, status: "PENDING", verification_url, user_code, expires_at}`. 502 si `codex app-server` est injoignable |
+| GET | `/api/admin/codex/login/{id}` | Statut (`PENDING`, `COMPLETED`, `EXPIRED`, `DENIED`, `CANCELLED`, `ERROR`) ; le code n’est renvoyé que tant qu’il est `PENDING` |
+| POST | `/api/admin/codex/login/{id}/cancel`, `/api/admin/codex/logout` | Annule la connexion en attente ; déconnecte le compte ChatGPT |
 
 ## Hors MVP (évolutions prévues)
 
-Déplacement d’un rendez-vous par le client lui-même, rappels, portail client, interface d’édition des réglages.
+Déplacement d’un rendez-vous par le client lui-même, rappels, portail client, interface d’édition des réglages, édition du compte rendu dans l’admin avant création du brouillon.

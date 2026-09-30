@@ -59,7 +59,7 @@ describe("SessionReports", () => {
     const items = within(screen.getByRole("list", { name: "Séances terminées" })).getAllByRole("listitem");
     expect(items).toHaveLength(3);
     expect(items[0]).toHaveTextContent(
-      "Marie MartinJeudi 8 octobre 2026 · 14:00 · Conseil IA - 3hBrouillon créé avec compte renduPréparé le Jeudi 8 octobre 2026 à 15:12Aperçu",
+      "Marie MartinJeudi 8 octobre 2026 · 14:00 · Conseil IA - 3hBrouillon créé avec compte renduPréparé le jeudi 8 octobre 2026 à 15:12Aperçu",
     );
     expect(items[1]).toHaveTextContent(
       "En attente de la transcriptionFireflies interrogé 3 fois · prochaine vérification à 15:20 · abandon à 21:00",
