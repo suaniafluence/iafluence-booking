@@ -51,6 +51,28 @@ def send_next_session_link(mailer: Mailer, purchase_id: int, token: str) -> None
         )
 
 
+def send_last_session_thanks(mailer: Mailer, purchase_id: int) -> None:
+    """Last hour used: thank the client and point to where more hours can be bought."""
+    with SessionLocal() as db:
+        purchase = db.get(Purchase, purchase_id)
+        customer = purchase.customer
+        settings = get_settings(db)
+        body = render(
+            "last_session_thanks.txt",
+            name=customer.name,
+            hours_purchased_label=fmt.hours(purchase.hours_purchased),
+            shop_url=get_config().shop_url,
+            consultant_name=settings.consultant_name,
+        )
+        send_safely(
+            mailer,
+            customer.email,
+            "Merci pour votre accompagnement Conseil IA",
+            body,
+            as_draft=not customer.auto_send_next_link,
+        )
+
+
 def send_booking_confirmations(mailer: Mailer, booking_id: int) -> None:
     with SessionLocal() as db:
         booking = db.get(Booking, booking_id)

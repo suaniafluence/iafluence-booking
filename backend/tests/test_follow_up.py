@@ -21,6 +21,7 @@ SLOT = paris(2026, 10, 8, 14)
 END = SLOT + timedelta(hours=1)
 NEXT_SLOT = paris(2026, 10, 9, 10)
 SUBJECT = "Réservez votre prochaine session de conseil IA"
+THANKS = "Merci pour votre accompagnement Conseil IA"
 
 
 def book(client, token, start=SLOT):
@@ -98,25 +99,48 @@ def test_the_same_link_books_the_next_session(client, fakes, token_for):
     assert r.status_code == 409 and r.json()["detail"] == "Votre prochaine session est déjà réservée."
 
 
-def test_last_hour_closes_without_email(client, fakes, token_for):
-    token = token_for(hours=1)
+def test_last_hour_drafts_a_thank_you_pointing_to_more_hours(client, fakes, token_for):
+    token = token_for(hours=1, name="Marie Martin", email="marie@example.com")
     book(client, token)
     confirmation = next(m for m in fakes["mailer"].sent if m["subject"] == "Votre rendez-vous Conseil IA est confirmé")
     assert "Un lien pour réserver" not in confirmation["body"]
 
-    assert follow_up.process_finished_sessions(fakes["mailer"], END) == 0
+    assert follow_up.process_finished_sessions(fakes["mailer"], END) == 1
     assert statuses() == ["completed"] and next_links(fakes) == []
+    [mail] = fakes["mailer"].drafts
+    assert (mail["to"], mail["subject"]) == ("marie@example.com", THANKS)
+    assert mail["body"] == (
+        "Bonjour Marie Martin,\n\nMerci pour notre dernière session de conseil IA et pour votre confiance.\n\n"
+        "Votre accompagnement (1 heure de conseil) est maintenant terminé.\n\n"
+        "Si vous souhaitez poursuivre avec de nouvelles heures de conseil, rendez-vous sur :\n\n"
+        "https://iafluence.fr\n\n"
+        "À bientôt,\n\nSuan Tay\nIAfluence\n"
+    )
+    assert all(m["subject"] != THANKS for m in fakes["mailer"].sent)
+
+    assert follow_up.process_finished_sessions(fakes["mailer"], END + timedelta(minutes=5)) == 0
+    assert len(fakes["mailer"].drafts) == 1
     r = client.post("/api/bookings", json={"token": token, "start": NEXT_SLOT.isoformat()})
     assert r.status_code == 409 and r.json()["code"] == "no_hours_left"
 
 
-def test_refunded_purchase_gets_no_link(client, fakes, token_for):
-    book(client, token_for(hours=3))
+def test_thank_you_is_sent_directly_on_auto_send_with_the_configured_shop(client, fakes, token_for, monkeypatch):
+    monkeypatch.setattr(get_config(), "shop_url", "https://iafluence.fr/conseil")
+    book(client, token_for(hours=1))
+    set_auto_send(True)
+    follow_up.process_finished_sessions(fakes["mailer"], END)
+    [mail] = [m for m in fakes["mailer"].sent if m["subject"] == THANKS]
+    assert "https://iafluence.fr/conseil" in mail["body"].splitlines()
+    assert fakes["mailer"].drafts == []
+
+
+def test_refunded_purchase_gets_no_email(client, fakes, token_for):
+    book(client, token_for(hours=1))
     with SessionLocal() as db:
         db.execute(update(Purchase).values(payment_status="refunded"))
         db.commit()
     assert follow_up.process_finished_sessions(fakes["mailer"], END) == 0
-    assert statuses() == ["completed"] and next_links(fakes) == []
+    assert statuses() == ["completed"] and fakes["mailer"].drafts == []
 
 
 def test_revoked_token_gets_no_link(client, fakes, token_for):
@@ -141,13 +165,14 @@ def test_link_uses_the_newest_active_token(client, fakes, token_for):
     assert "https://booking.iafluence.test/reservation/tok-new" in mail["body"].splitlines()
 
 
-def test_long_finished_sessions_are_closed_silently(client, fakes, token_for, caplog):
-    book(client, token_for(hours=3))
+@pytest.mark.parametrize("hours", [3, 1])
+def test_long_finished_sessions_are_closed_silently(client, fakes, token_for, caplog, hours):
+    book(client, token_for(hours=hours))
     late = END + follow_up.EMAIL_GRACE + timedelta(seconds=1)
     with caplog.at_level(logging.WARNING, logger="app.services.follow_up"):
         assert follow_up.process_finished_sessions(fakes["mailer"], late) == 0
-    assert statuses() == ["completed"] and next_links(fakes) == []
-    assert "closed without next-session email" in caplog.text
+    assert statuses() == ["completed"] and fakes["mailer"].drafts == []
+    assert "closed without follow-up email" in caplog.text
 
 
 def test_email_at_the_grace_limit_is_still_sent(client, fakes, token_for):

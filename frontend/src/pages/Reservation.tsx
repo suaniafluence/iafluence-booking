@@ -99,7 +99,11 @@ function Welcome({ ctx, onNext }: { ctx: BookingContext; onNext: () => void }) {
       <Card>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Toutes vos heures ont été utilisées</h1>
         <p className="mt-4 text-slate-600">
-          Merci pour votre confiance. Pour poursuivre l’accompagnement, répondez simplement à l’un de nos emails.
+          Merci pour votre confiance. Pour poursuivre avec de nouvelles heures de conseil, rendez-vous sur{" "}
+          <a className="text-brand-600 underline" href="https://iafluence.fr">
+            iafluence.fr
+          </a>
+          .
         </p>
         <div className="mt-6">
           <HoursSummary rows={[["Heures achetées", hours(p.hours_purchased)], ["Heures restantes", hours(0)]]} />

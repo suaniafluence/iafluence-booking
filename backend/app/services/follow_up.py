@@ -24,8 +24,12 @@ EMAIL_GRACE = timedelta(hours=24)
 
 
 def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
-    """Close every confirmed session that has ended; return how many next-session links were emailed."""
+    """Close every confirmed session that has ended; return how many follow-up emails were prepared.
+
+    Hours left -> link to book the next session. Last hour used -> thanks, with where to buy more hours.
+    """
     to_notify: list[tuple[int, str]] = []
+    to_thank: list[int] = []
     with SessionLocal() as db:
         finished = db.scalars(
             select(Booking)
@@ -36,10 +40,13 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
         for booking in finished:
             booking.status = "completed"
             purchase = booking.purchase
-            if purchase.payment_status != "paid" or purchase.hours_remaining < 1:
+            if purchase.payment_status != "paid":
                 continue
             if now - booking.end_datetime > EMAIL_GRACE:
-                log.warning("booking %s ended at %s: closed without next-session email", booking.id, booking.end_datetime)
+                log.warning("booking %s ended at %s: closed without follow-up email", booking.id, booking.end_datetime)
+                continue
+            if purchase.hours_remaining < 1:
+                to_thank.append(purchase.id)
                 continue
             token = db.scalar(
                 select(BookingToken.token)
@@ -52,7 +59,9 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
     # After the commit: a crash can lose an email, never send it twice.
     for purchase_id, token in to_notify:
         notifications.send_next_session_link(mailer, purchase_id, token)
-    return len(to_notify)
+    for purchase_id in to_thank:
+        notifications.send_last_session_thanks(mailer, purchase_id)
+    return len(to_notify) + len(to_thank)
 
 
 async def run_forever(mailer_factory: Callable[[], Mailer], interval_s: float) -> None:

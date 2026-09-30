@@ -59,7 +59,8 @@ describe("Reservation", () => {
     );
     renderAt();
     expect(await screen.findByRole("heading", { name: "Toutes vos heures ont été utilisées" })).toBeInTheDocument();
-    expect(screen.getByText(/répondez simplement à l’un de nos emails/)).toBeInTheDocument();
+    expect(screen.getByText(/poursuivre avec de nouvelles heures de conseil/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "iafluence.fr" })).toHaveAttribute("href", "https://iafluence.fr");
     expect(summary()).toEqual({ "Heures achetées": "3 h", "Heures restantes": "0 h" });
     expect(screen.queryByRole("button", { name: "Choisir mon créneau" })).not.toBeInTheDocument();
   });

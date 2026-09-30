@@ -10,6 +10,8 @@ class Config(BaseSettings):
 
     database_url: str = "postgresql+psycopg://iafluence:iafluence@localhost:5432/iafluence"
     public_base_url: str = "http://localhost:5173"
+    # Where clients buy more hours (thank-you email after their last session).
+    shop_url: str = "https://iafluence.fr"
 
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""

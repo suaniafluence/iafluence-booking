@@ -1,0 +1,14 @@
+Bonjour {{ name }},
+
+Merci pour notre dernière session de conseil IA et pour votre confiance.
+
+Votre accompagnement ({{ hours_purchased_label }} de conseil) est maintenant terminé.
+
+Si vous souhaitez poursuivre avec de nouvelles heures de conseil, rendez-vous sur :
+
+{{ shop_url }}
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence
