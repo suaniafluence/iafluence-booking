@@ -124,6 +124,8 @@ class SessionReport(Base):
     status: Mapped[str] = mapped_column(String(32))
     # Start of the Fireflies wait window (end of the session, or the last « Relancer »).
     waiting_since: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Hours left once this session ended: decides « next session » vs « last session », whatever is booked meanwhile.
+    hours_remaining: Mapped[int] = mapped_column(Integer)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     transcript_attempts: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
     summary_attempts: Mapped[int] = mapped_column(Integer, server_default="0", default=0)

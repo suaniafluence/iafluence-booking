@@ -218,6 +218,22 @@ def test_last_session_summary_points_to_the_shop(finished, fakes, gw):
     assert '"derniere_seance": true' in fakes["codex"].turns[0]["prompt"]
 
 
+def test_next_session_booked_before_the_draft_does_not_make_it_the_last(client, finished, fakes, gw):
+    # 2 h: the client books the second (and last) hour before the summary is ready.
+    token = finished(hours=2)
+    assert report().hours_remaining == 1
+    nxt = paris(2026, 10, 9, 10)
+    assert client.post("/api/bookings", json={"token": token, "start": nxt.isoformat()}).status_code == 201
+    record(fakes)
+    session_reports.process(gw, END + POLL)
+    assert '"heures_restantes": 1' in fakes["codex"].turns[0]["prompt"]
+    assert '"derniere_seance": false' in fakes["codex"].turns[0]["prompt"]
+    [mail] = fakes["mailer"].drafts
+    assert mail["subject"] == session_reports.SUBJECT_NEXT
+    assert "Il vous reste 1 heure de conseil." in mail["body"]
+    assert f"https://booking.iafluence.test/reservation/{token}" in mail["body"].splitlines()
+
+
 def test_second_session_is_numbered_two(client, finished, fakes, gw):
     token = finished()
     record(fakes)
@@ -562,7 +578,8 @@ def test_claim_lasts_the_codex_timeout_plus_a_margin(finished, fakes, gw, monkey
 
     monkeypatch.setattr(fakes["codex"], "run_turn", run_turn)
     session_reports.process(gw, END + POLL)
-    assert seen == [END + POLL + timedelta(seconds=600) + timedelta(minutes=5)]
+    # Both attempts (2 × the turn timeout) plus a margin: never taken over while Codex still works on it.
+    assert seen == [END + POLL + 2 * timedelta(seconds=600) + timedelta(minutes=5)]
 
 
 def test_outcome_is_dropped_if_the_admin_drafted_meanwhile(finished, fakes, gw, monkeypatch):

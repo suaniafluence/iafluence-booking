@@ -37,7 +37,8 @@ from app.services.settings_service import get_settings
 log = logging.getLogger(__name__)
 
 MATCH_WINDOW = timedelta(minutes=15)
-# A claim outlives the Codex turn timeout by this much before another process may take the report over.
+# A claim outlives every Codex turn of a summary (timeout × attempts) by this much before another process may take
+# the report over.
 CLAIM_MARGIN = timedelta(minutes=5)
 # First try, then one more after an invalid answer or a Codex error.
 MAX_SUMMARY_ATTEMPTS = 2
@@ -94,6 +95,8 @@ def create_for(db: Session, booking: Booking, now: datetime) -> None:
             booking_id=booking.id,
             status="waiting_transcript",
             waiting_since=now,
+            # Frozen now: the client may book the next session before the email is prepared.
+            hours_remaining=booking.purchase.hours_remaining,
             # Fireflies needs a few minutes to process the recording.
             next_attempt_at=now + poll_interval(),
         )
@@ -112,7 +115,7 @@ def compose(db: Session, report: SessionReport, now: datetime, *, with_summary: 
     booking = report.booking
     purchase, customer = booking.purchase, booking.customer
     settings = get_settings(db)
-    last = purchase.hours_remaining < 1
+    last = report.hours_remaining < 1
     reason = None
     token = None
     if purchase.payment_status != "paid":
@@ -128,7 +131,7 @@ def compose(db: Session, report: SessionReport, now: datetime, *, with_summary: 
     ctx = {
         "name": customer.name,
         "last": last,
-        "hours_remaining_label": fmt.hours(purchase.hours_remaining),
+        "hours_remaining_label": fmt.hours(report.hours_remaining),
         "hours_purchased_label": fmt.hours(purchase.hours_purchased),
         "booking_url": notifications.booking_url(token) if token else None,
         "shop_url": get_config().shop_url,
@@ -290,12 +293,14 @@ def _claim(now: datetime) -> int | None:
         )
         if report is None:
             return None
-        report.claimed_until = now + timedelta(seconds=get_config().codex_turn_timeout_seconds) + CLAIM_MARGIN
+        turns = timedelta(seconds=get_config().codex_turn_timeout_seconds) * MAX_SUMMARY_ATTEMPTS
+        report.claimed_until = now + turns + CLAIM_MARGIN
         db.commit()
         return report.id
 
 
-def session_context(db: Session, booking: Booking) -> dict:
+def session_context(db: Session, report: SessionReport) -> dict:
+    booking = report.booking
     purchase, settings = booking.purchase, get_settings(db)
     number = db.scalar(
         select(func.count(Booking.id)).where(
@@ -311,8 +316,8 @@ def session_context(db: Session, booking: Booking) -> dict:
         "date": f"{fmt.long_date(booking.start_datetime, settings.timezone)}, "
         f"{fmt.hour_range(booking.start_datetime, booking.end_datetime, settings.timezone, 'h')}",
         "heures_achetees": purchase.hours_purchased,
-        "heures_restantes": purchase.hours_remaining,
-        "derniere_seance": purchase.hours_remaining < 1,
+        "heures_restantes": report.hours_remaining,
+        "derniere_seance": report.hours_remaining < 1,
         "consultant": settings.consultant_name,
     }
 
@@ -333,7 +338,7 @@ def _finish(report_id: int, now: datetime, apply: Callable[[Session, SessionRepo
 def summarize(gw: Gateways, report_id: int, now: datetime) -> list[Email]:
     with SessionLocal() as db:
         report = db.get(SessionReport, report_id)
-        context = session_context(db, report.booking)
+        context = session_context(db, report)
         transcript_id, waiting_since = report.fireflies_transcript_id, report.waiting_since
 
     def failed(problem: str, action: str):
