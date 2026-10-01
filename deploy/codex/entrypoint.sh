@@ -13,10 +13,10 @@ token_file=$(mktemp)
 printf '%s' "$CODEX_WS_TOKEN" > "$token_file"
 unset CODEX_WS_TOKEN
 
-# Codex requires WebSocket authentication for a non-localhost listener even when its capability-token options are
-# supplied. Keep Codex on loopback and expose a separate, unauthenticated-at-the-TCP-layer relay. No host port is
-# published by docker-compose; application-layer authentication remains enforced by the app-server.
-socat "TCP-LISTEN:${CODEX_PORT:-4500},fork,reuseaddr" "TCP:127.0.0.1:${CODEX_INTERNAL_PORT:-4501}" &
+# Codex validates both the listener and the HTTP Host as loopback. The relay binds IPv4 explicitly for Docker and
+# rewrites only Host; the Authorization header and the WebSocket stream pass through unchanged. No host port is
+# published by docker-compose, and application-layer authentication remains enforced by the app-server.
+node /usr/local/lib/codex-relay.mjs &
 
 exec codex app-server \
   --listen "ws://127.0.0.1:${CODEX_INTERNAL_PORT:-4501}" \
