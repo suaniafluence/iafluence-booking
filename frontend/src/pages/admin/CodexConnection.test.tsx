@@ -69,11 +69,12 @@ describe("CodexConnection", () => {
     expect(screen.getByRole("button", { name: "Reconnecter Codex" })).toBeInTheDocument();
   });
 
-  it("explains when the feature is not configured", async () => {
+  it("explains when the codex service is not installed", async () => {
     vi.mocked(api.adminCodexStatus).mockResolvedValue(codexStatus({ state: "not_configured" }));
     render(<CodexConnection />);
-    expect(await screen.findByText(/Comptes rendus automatiques désactivés/)).toHaveTextContent(
-      "Comptes rendus automatiques désactivés : renseignez FIREFLIES_API_KEY et CODEX_APP_SERVER_URL sur le serveur.",
+    expect(await screen.findByText("Service Codex non installé")).toBeInTheDocument();
+    expect(screen.getByText(/Démarrez le service/)).toHaveTextContent(
+      "Démarrez le service codex sur le serveur (COMPOSE_PROFILES) et renseignez CODEX_APP_SERVER_URL et CODEX_WS_TOKEN : le bouton « Connecter Codex » apparaîtra ici.",
     );
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });

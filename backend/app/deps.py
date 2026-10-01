@@ -44,7 +44,9 @@ def get_fireflies() -> FirefliesGateway:
         from app.dev_fakes import DemoFireflies
 
         return DemoFireflies()
-    return LiveFireflies()
+    from app.services.fireflies_account import current_key
+
+    return LiveFireflies(api_key=current_key)
 
 
 @lru_cache

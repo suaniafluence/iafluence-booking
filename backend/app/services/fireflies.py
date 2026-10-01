@@ -6,6 +6,7 @@ Transcripts are returned to the caller only, never logged nor stored.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Protocol
@@ -42,6 +43,13 @@ query Transcript($id: String!) {
 """
 
 
+ACCOUNT_QUERY = """
+query Account {
+  user { email name }
+}
+"""
+
+
 class FirefliesError(Exception):
     """Fireflies unreachable, key refused, quota reached or unexpected answer: try again at the next poll."""
 
@@ -52,6 +60,12 @@ class TranscriptMeta:
     start: datetime
     emails: frozenset[str] = field(default_factory=frozenset)
     meeting_link: str | None = None
+
+
+@dataclass(frozen=True)
+class FirefliesAccount:
+    email: str | None
+    name: str | None
 
 
 @dataclass(frozen=True)
@@ -66,6 +80,9 @@ class FirefliesGateway(Protocol):
     def sentences(self, transcript_id: str) -> list[Sentence]:
         """Empty while Fireflies is still processing the recording."""
 
+    def account(self, api_key: str) -> FirefliesAccount:
+        """Owner of this key (« Connexion Fireflies »): FirefliesError if the key is refused."""
+
 
 def parse_meta(raw: dict) -> TranscriptMeta:
     emails = {e for e in raw.get("participants") or [] if e}
@@ -79,18 +96,27 @@ def parse_meta(raw: dict) -> TranscriptMeta:
     )
 
 
-class LiveFireflies:
-    def __init__(self, transport: httpx.BaseTransport | None = None):
-        self._transport = transport
+def _server_key() -> str:
+    return get_config().fireflies_api_key
 
-    def _query(self, query: str, variables: dict) -> dict:
-        cfg = get_config()
+
+class LiveFireflies:
+    """api_key: read at each request, so a key connected from the admin applies without a restart."""
+
+    def __init__(self, transport: httpx.BaseTransport | None = None, api_key: Callable[[], str] = _server_key):
+        self._transport = transport
+        self._api_key = api_key
+
+    def _query(self, query: str, variables: dict, api_key: str | None = None) -> dict:
+        key = api_key if api_key is not None else self._api_key()
+        if not key:
+            raise FirefliesError("Fireflies n'est pas connecté")
         try:
             with httpx.Client(transport=self._transport, timeout=TIMEOUT_S) as http:
                 r = http.post(
-                    cfg.fireflies_api_url,
+                    get_config().fireflies_api_url,
                     json={"query": query, "variables": variables},
-                    headers={"Authorization": f"Bearer {cfg.fireflies_api_key}"},
+                    headers={"Authorization": f"Bearer {key}"},
                 )
         except httpx.HTTPError as e:
             raise FirefliesError(f"Fireflies injoignable ({type(e).__name__})") from e
@@ -127,6 +153,11 @@ class LiveFireflies:
             for s in transcript.get("sentences") or []
             if s and s.get("text")
         ]
+
+
+    def account(self, api_key: str) -> FirefliesAccount:
+        user = self._query(ACCOUNT_QUERY, {}, api_key=api_key).get("user") or {}
+        return FirefliesAccount(email=user.get("email") or None, name=user.get("name") or None)
 
 
 def normalize_meet_url(url: str | None) -> str | None:

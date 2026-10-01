@@ -11,10 +11,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_config
 from app.db import get_db
-from app.deps import get_calendar, get_codex, get_mailer, get_now
+from app.deps import get_calendar, get_codex, get_fireflies, get_mailer, get_now
 from app.models import Booking, BookingToken, CodexLogin, Customer, Purchase, SessionReport
 from app.schemas import (
     CancelBookingIn,
+    FirefliesConnectIn,
     CustomerPatchIn,
     LoginIn,
     ManualClientIn,
@@ -22,9 +23,18 @@ from app.schemas import (
     PurchaseHoursIn,
     ReportSettingsIn,
 )
-from app.services import booking_service, calendar_print, codex_login, manual_purchase, notifications, session_reports
+from app.services import (
+    booking_service,
+    calendar_print,
+    codex_login,
+    fireflies_account,
+    manual_purchase,
+    notifications,
+    session_reports,
+)
 from app.services.calendar_service import CalendarUnavailable
 from app.services.codex import CodexUnavailable
+from app.services.fireflies import FirefliesError
 from app.services.settings_service import busy_calendar_ids, get_settings
 
 router = APIRouter(prefix="/api/admin")
@@ -168,7 +178,7 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
             for p in purchases
         ],
         "reports": {
-            "enabled": get_config().session_reports_enabled,
+            "enabled": session_reports.enabled(db),
             "send_without_review": settings.send_reports_without_review,
             "sessions": session_reports.overview(db, tz),
         },
@@ -338,7 +348,7 @@ def _login(db: Session, login_id: int) -> CodexLogin:
 @router.get("/codex", dependencies=[Depends(require_admin)])
 def codex_status(db: Session = Depends(get_db), codex=Depends(get_codex), now: datetime = Depends(get_now)):
     """connected / expired / disconnected / unavailable. Never any token: they stay in the codex container."""
-    if not get_config().session_reports_enabled:
+    if not get_config().codex_enabled:
         return {"state": "not_configured", "email": None, "plan": None, "detail": None, "pending_login": None}
     return codex_login.status(db, codex, now)
 
@@ -367,3 +377,30 @@ def codex_cancel_login(
 def codex_logout(db: Session = Depends(get_db), codex=Depends(get_codex), now: datetime = Depends(get_now)):
     _codex_call(lambda: codex_login.logout(db, codex, now))
     return {"state": "disconnected"}
+
+
+# --- Fireflies connection (API key) ----------------------------------------------------------------------------
+
+
+@router.get("/fireflies", dependencies=[Depends(require_admin)])
+def fireflies_status(db: Session = Depends(get_db)):
+    """connected (admin | server) / disconnected. Never the key: only the Fireflies account it belongs to."""
+    return fireflies_account.status(db)
+
+
+@router.post("/fireflies", dependencies=[Depends(require_admin)])
+def fireflies_connect(
+    body: FirefliesConnectIn,
+    db: Session = Depends(get_db),
+    fireflies=Depends(get_fireflies),
+    now: datetime = Depends(get_now),
+):
+    try:
+        return fireflies_account.connect(db, fireflies, body.api_key, now)
+    except FirefliesError as e:
+        raise HTTPException(400, f"Fireflies a refusé la connexion : {e}.")
+
+
+@router.delete("/fireflies", dependencies=[Depends(require_admin)])
+def fireflies_disconnect(db: Session = Depends(get_db)):
+    return fireflies_account.disconnect(db)

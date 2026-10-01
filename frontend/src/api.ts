@@ -111,6 +111,11 @@ export const api = {
   adminCodexCancelLogin: (loginId: number) =>
     request<CodexLogin>(`/api/admin/codex/login/${loginId}/cancel`, { method: "POST" }),
   adminCodexLogout: () => request<{ state: "disconnected" }>("/api/admin/codex/logout", { method: "POST" }),
+  adminFirefliesStatus: () => request<FirefliesStatus>("/api/admin/fireflies"),
+  /** Checked against Fireflies before being stored (encrypted); never sent back. */
+  adminFirefliesConnect: (apiKey: string) =>
+    request<FirefliesStatus>("/api/admin/fireflies", { method: "POST", body: JSON.stringify({ api_key: apiKey }) }),
+  adminFirefliesDisconnect: () => request<FirefliesStatus>("/api/admin/fireflies", { method: "DELETE" }),
   /** « Imprimer mon calendrier » : PDF of every busy period from `start` to `end` (YYYY-MM-DD, both included). */
   adminCalendarPdf: async (start: string, end: string) =>
     (await send(`/api/admin/calendar.pdf?start=${enc(start)}&end=${enc(end)}`)).blob(),
@@ -173,6 +178,15 @@ export type CodexStatus = {
   plan: string | null;
   detail: string | null;
   pending_login: CodexLogin | null;
+};
+
+export type FirefliesStatus = {
+  state: "connected" | "disconnected";
+  /** admin: key connected from this page; server: FIREFLIES_API_KEY. */
+  source: "admin" | "server" | null;
+  email: string | null;
+  name: string | null;
+  detail: string | null;
 };
 
 export type NewClient = {

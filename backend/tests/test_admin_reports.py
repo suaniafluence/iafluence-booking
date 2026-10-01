@@ -254,7 +254,11 @@ def test_codex_status_states(admin, fakes, monkeypatch):
         "state": "unavailable",
         "detail": "codex app-server injoignable (ConnectionRefusedError)",
     }
+    # Codex can be linked before Fireflies is set up.
+    fakes["codex"].unavailable = False
     monkeypatch.setattr(get_config(), "fireflies_api_key", "")
+    assert admin.get("/api/admin/codex").json() == base | {"state": "disconnected"}
+    monkeypatch.setattr(get_config(), "codex_app_server_url", "")
     assert admin.get("/api/admin/codex").json() == base | {"state": "not_configured"}
 
 

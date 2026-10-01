@@ -51,13 +51,12 @@ def test_gateways_follow_fake_integrations_flag(monkeypatch, fresh_deps, fake, e
     [
         ({}, False),
         ({"fireflies_api_key": "k"}, False),
-        ({"codex_app_server_url": "ws://codex:4500"}, False),
-        ({"fireflies_api_key": "k", "codex_app_server_url": "ws://codex:4500"}, True),
+        ({"codex_app_server_url": "ws://codex:4500"}, True),
         ({"fake_integrations": True}, True),
     ],
 )
-def test_session_reports_need_fireflies_and_codex(values, enabled):
-    assert Config(**values).session_reports_enabled is enabled
+def test_codex_connection_needs_only_the_app_server(values, enabled):
+    assert Config(**values).codex_enabled is enabled
 
 
 def test_get_now_is_aware_utc():

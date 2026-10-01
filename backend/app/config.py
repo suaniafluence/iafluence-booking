@@ -33,7 +33,7 @@ class Config(BaseSettings):
     follow_up_poll_seconds: int = 60
 
     # Session reports (app.services.session_reports): Fireflies transcript -> Codex summary -> Gmail draft.
-    # Off unless both the Fireflies key and the codex app-server URL are set.
+    # Off unless the codex app-server URL is set and Fireflies is connected (from the admin, or with this key).
     fireflies_api_key: str = ""
     fireflies_api_url: str = "https://api.fireflies.ai/graphql"
     # One Fireflies request per poll for all waiting sessions. Free plan (50 requests/day): raise to 1800.
@@ -54,8 +54,9 @@ class Config(BaseSettings):
     demo_outbox_dir: str = ""
 
     @property
-    def session_reports_enabled(self) -> bool:
-        return self.fake_integrations or bool(self.fireflies_api_key and self.codex_app_server_url)
+    def codex_enabled(self) -> bool:
+        """« Connexion Codex » only needs the codex app-server: the ChatGPT account can be linked before Fireflies."""
+        return self.fake_integrations or bool(self.codex_app_server_url)
 
     @property
     def allowed_product_ids(self) -> set[str]:

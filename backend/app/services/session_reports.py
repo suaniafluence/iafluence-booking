@@ -29,7 +29,7 @@ from app.db import SessionLocal
 from app.i18n import text
 from app.models import Booking, SessionReport
 from app.services import formatting as fmt
-from app.services import notifications, report_content
+from app.services import fireflies_account, notifications, report_content
 from app.services.codex import CodexGateway, CodexNotConnected, CodexTurnFailed, CodexUnavailable
 from app.services.email_service import Mailer, render, send_safely
 from app.services.fireflies import FirefliesError, FirefliesGateway, TranscriptMeta, normalize_meet_url
@@ -76,6 +76,12 @@ class ReportActionError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+
+
+def enabled(db: Session) -> bool:
+    """Codex app-server configured and a Fireflies key (connected in the admin, or FIREFLIES_API_KEY)."""
+    cfg = get_config()
+    return cfg.fake_integrations or (cfg.codex_enabled and bool(fireflies_account.api_key(db)))
 
 
 def poll_interval() -> timedelta:

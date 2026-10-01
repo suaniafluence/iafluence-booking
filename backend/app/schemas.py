@@ -100,3 +100,7 @@ class PurchaseHoursIn(BaseModel):
 
 class ReportSettingsIn(BaseModel):
     send_without_review: bool
+
+
+class FirefliesConnectIn(BaseModel):
+    api_key: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=512)]

@@ -5,6 +5,7 @@ import { Alert, Button, Card, Layout, Spinner } from "../components/Layout";
 import { euros, hm, hours, longDate } from "../format";
 import { CalendarPrint } from "./admin/CalendarPrint";
 import { CodexConnection } from "./admin/CodexConnection";
+import { FirefliesConnection } from "./admin/FirefliesConnection";
 import { SessionReports } from "./admin/SessionReports";
 
 export default function Admin() {
@@ -130,6 +131,8 @@ function Dashboard({ data, onChange }: { data: AdminOverview; onChange: () => vo
       <SessionReports reports={data.reports} onChange={onChange} />
 
       <CodexConnection />
+
+      <FirefliesConnection />
     </div>
   );
 }

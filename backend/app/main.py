@@ -25,7 +25,7 @@ async def lifespan(_: FastAPI):
     tasks = []
     if interval > 0:
         tasks.append(asyncio.create_task(follow_up.run_forever(get_mailer, interval)))
-        if cfg.session_reports_enabled:
+        if cfg.codex_enabled:
             # Its own loop: a Codex turn lasts minutes and must not delay the closing of sessions.
             tasks.append(asyncio.create_task(session_reports.run_forever(report_gateways, interval, get_now)))
     yield
