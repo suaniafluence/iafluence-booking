@@ -22,7 +22,8 @@ from app.services.formatting import MONTHS, WEEKDAYS
 
 log = logging.getLogger(__name__)
 
-MAX_DAYS = 93  # about three months, 14 pages
+MAX_DAYS = 366  # a whole year, leap years included: 53 pages at most
+FREE_BUSY_SPAN = timedelta(days=31)  # Google refuses free/busy over long ranges: asked month by month
 DEFAULT_HOURS = (8, 20)  # grid shown at least from 08:00 to 20:00, longer when a period falls outside
 
 JOURS, MOIS = WEEKDAYS["fr"], MONTHS["fr"]  # the admin is in French
@@ -54,7 +55,11 @@ def collect(
             events += gateway.busy_events(cid, time_min, time_max, tz)
         except CalendarUnavailable as exc:
             log.warning("printable calendar: using free/busy for a calendar source (%s)", exc)
-            events += [BusyEvent(i.start, i.end) for i in gateway.free_busy([cid], time_min, time_max)]
+            start = time_min
+            while start < time_max:
+                end = min(start + FREE_BUSY_SPAN, time_max)
+                events += [BusyEvent(i.start, i.end) for i in gateway.free_busy([cid], start, end)]
+                start = end
     return events
 
 
