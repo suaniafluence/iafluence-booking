@@ -70,30 +70,13 @@ describe("CodexConnection", () => {
   });
 
   it("explains when the codex service is not installed", async () => {
-    vi.mocked(api.adminCodexStatus).mockResolvedValue(codexStatus({ state: "not_configured", reports_enabled: false }));
+    vi.mocked(api.adminCodexStatus).mockResolvedValue(codexStatus({ state: "not_configured" }));
     render(<CodexConnection />);
     expect(await screen.findByText("Service Codex non installé")).toBeInTheDocument();
     expect(screen.getByText(/Démarrez le service/)).toHaveTextContent(
       "Démarrez le service codex sur le serveur (COMPOSE_PROFILES) et renseignez CODEX_APP_SERVER_URL et CODEX_WS_TOKEN : le bouton « Connecter Codex » apparaîtra ici.",
     );
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Comptes rendus pas encore actifs/)).not.toBeInTheDocument();
-  });
-
-  it("lets Codex be linked before Fireflies is set up", async () => {
-    vi.mocked(api.adminCodexStatus).mockResolvedValue(codexStatus({ reports_enabled: false }));
-    render(<CodexConnection />);
-    expect(await screen.findByRole("button", { name: "Connecter Codex" })).toBeEnabled();
-    expect(screen.getByText(/Comptes rendus pas encore actifs/)).toHaveTextContent(
-      "Comptes rendus pas encore actifs : renseignez FIREFLIES_API_KEY sur le serveur pour récupérer les transcriptions.",
-    );
-  });
-
-  it("does not mention Fireflies once reports are enabled", async () => {
-    render(<CodexConnection />);
-    await screen.findByText("Non connecté");
-    expect(screen.getByRole("heading", { name: "Associer votre compte ChatGPT" })).toBeInTheDocument();
-    expect(screen.queryByText(/Comptes rendus pas encore actifs/)).not.toBeInTheDocument();
   });
 
   it("reports an unreachable app-server and retries", async () => {

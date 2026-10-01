@@ -212,6 +212,12 @@ class Settings(Base):
     # Customers on « Envoi auto »: an email carrying a generated summary is still left as a draft for review,
     # unless this is on.
     send_reports_without_review: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
+    # « Connexion Fireflies » (app.services.fireflies_account): API key encrypted with a key derived from
+    # SESSION_SECRET, and the account it belongs to, for display. Empty = FIREFLIES_API_KEY of the server, if any.
+    fireflies_api_key_enc: Mapped[str | None] = mapped_column(Text)
+    fireflies_email: Mapped[str | None] = mapped_column(String(320))
+    fireflies_name: Mapped[str | None] = mapped_column(String(255))
+    fireflies_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AvailabilityRule(Base):

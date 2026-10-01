@@ -123,6 +123,7 @@ class FakeFireflies:
         self.list_calls: list[tuple] = []
         self.fail: Exception | None = None
         self.fail_sentences: Exception | None = None
+        self.checked_keys: list[str] = []
 
     def add(self, transcript_id, start, emails=(), meeting_link=None, sentences=None):
         from app.services.fireflies import Sentence, TranscriptMeta
@@ -143,6 +144,14 @@ class FakeFireflies:
         if self.fail_sentences:
             raise self.fail_sentences
         return self.transcripts[transcript_id]
+
+    def account(self, api_key):
+        from app.services.fireflies import FirefliesAccount, FirefliesError
+
+        self.checked_keys.append(api_key)
+        if api_key == "refusee":
+            raise FirefliesError("clé API Fireflies refusée")
+        return FirefliesAccount(email="suan@iafluence.fr", name="Suan Tay")
 
 
 VALID_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="#eef2ff"/></svg>'

@@ -5,6 +5,7 @@ import type {
   CodexLogin,
   CodexStatus,
   FinishedSession,
+  FirefliesStatus,
   SessionReport,
   Slot,
 } from "../api";
@@ -152,7 +153,15 @@ export const codexStatus = (over: Partial<CodexStatus> = {}): CodexStatus => ({
   plan: null,
   detail: null,
   pending_login: null,
-  reports_enabled: true,
+  ...over,
+});
+
+export const firefliesStatus = (over: Partial<FirefliesStatus> = {}): FirefliesStatus => ({
+  state: "disconnected",
+  source: null,
+  email: null,
+  name: null,
+  detail: null,
   ...over,
 });
 

@@ -125,12 +125,6 @@ export function CodexConnection() {
         {!status && !error && <p className="text-slate-500">Vérification de la connexion…</p>}
         {status && !login && <State status={status} busy={busy} onLogout={logout} onRetry={load} />}
         {login && <DeviceCode login={login} busy={busy} onCancel={() => cancel(login)} />}
-        {status && !status.reports_enabled && status.state !== "not_configured" && (
-          <p className="text-slate-500">
-            Comptes rendus pas encore actifs : renseignez <code>FIREFLIES_API_KEY</code> sur le serveur pour récupérer
-            les transcriptions.
-          </p>
-        )}
       </div>
     </section>
   );
@@ -138,7 +132,7 @@ export function CodexConnection() {
 
 const CONNECTABLE: CodexStatus["state"][] = ["disconnected", "expired"];
 
-function Badge({ tone, children }: { tone: "ok" | "warn" | "off"; children: string }) {
+export function Badge({ tone, children }: { tone: "ok" | "warn" | "off"; children: string }) {
   const styles = {
     ok: "bg-emerald-50 text-emerald-800 ring-emerald-200",
     warn: "bg-amber-50 text-amber-800 ring-amber-200",

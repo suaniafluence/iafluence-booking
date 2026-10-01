@@ -25,7 +25,7 @@ from app.services.availability import Interval
 from app.services.calendar_service import BusyEvent, CreatedEvent
 from app.services.codex import CodexAccount, CodexNotConnected, DeviceCode
 from app.services.email_service import build_message
-from app.services.fireflies import Sentence, TranscriptMeta
+from app.services.fireflies import FirefliesAccount, Sentence, TranscriptMeta
 
 log = logging.getLogger("dev_fakes")
 PARIS = ZoneInfo("Europe/Paris")
@@ -114,6 +114,9 @@ class DemoFireflies:
                 )
                 for b in bookings
             ]
+
+    def account(self, api_key):
+        return FirefliesAccount(email="demo@iafluence.fr", name="Démo IAfluence")
 
     def sentences(self, transcript_id):
         return [

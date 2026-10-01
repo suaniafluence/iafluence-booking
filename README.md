@@ -282,7 +282,7 @@ Pour les environnements, préférez une branche Neon par environnement (`main` p
 
 Facultatif : sans ces réglages, l’email de fin de séance reste celui de la V1.
 
-1. **Fireflies** : *Settings → Developer settings* → copier la clé API dans `FIREFLIES_API_KEY`. L’API est incluse dans tous les forfaits, avec un quota : **Free 50 requêtes/jour**, Pro 500/jour, Business 60/min. Une requête liste les enregistrements de toutes les séances en attente, puis une requête lit la transcription trouvée. Avec le forfait Free, passer `FIREFLIES_POLL_SECONDS=1800` (une vérification toutes les 30 min, 12 au plus par séance). L’enregistreur Fireflies doit rejoindre les réunions Meet et le client doit y figurer comme participant (invitation Google Agenda) ; sinon la séance est reconnue par son lien Meet.
+1. **Fireflies** : *Settings → Developer settings* → copier la clé API, puis dans `/admin` → *Connexion Fireflies* → la coller et **Connecter Fireflies**. La clé est vérifiée auprès de Fireflies (le compte s’affiche), chiffrée en base avec une clé dérivée de `SESSION_SECRET` et jamais renvoyée au navigateur ; si `SESSION_SECRET` change, il suffit de la recoller. À défaut, `FIREFLIES_API_KEY` dans `shared/.env` est utilisée. L’API est incluse dans tous les forfaits, avec un quota : **Free 50 requêtes/jour**, Pro 500/jour, Business 60/min. Une requête liste les enregistrements de toutes les séances en attente, puis une requête lit la transcription trouvée. Avec le forfait Free, passer `FIREFLIES_POLL_SECONDS=1800` (une vérification toutes les 30 min, 12 au plus par séance). L’enregistreur Fireflies doit rejoindre les réunions Meet et le client doit y figurer comme participant (invitation Google Agenda) ; sinon la séance est reconnue par son lien Meet.
 2. **Service Codex** : dans `shared/.env`, ajouter `codex` à `COMPOSE_PROFILES` (`localdb,codex`, ou `codex` avec Neon), puis :
    ```dotenv
    CODEX_APP_SERVER_URL=ws://codex:4500
@@ -327,10 +327,11 @@ UPDATE settings SET buffer_before_min = 15, buffer_after_min = 15, minimum_notic
 | POST | `/api/admin/reports/{id}/retry` | « Relancer » : nouveau résumé si la transcription a été trouvée, sinon 6 h de recherche Fireflies de plus. 409 si un brouillon existe déjà ou si un résumé est en cours |
 | POST | `/api/admin/reports/{id}/draft-without-summary` | Email V1, toujours en brouillon. 409 si déjà préparé, achat remboursé ou lien révoqué |
 | PATCH | `/api/admin/report-settings` `{send_without_review}` | Envoi direct des emails avec résumé pour les clients en « Envoi auto » |
-| GET | `/api/admin/codex` | `{state: connected \| expired \| disconnected \| unavailable \| not_configured, email, plan, detail, pending_login, reports_enabled}` — jamais de jeton |
+| GET | `/api/admin/codex` | `{state: connected \| expired \| disconnected \| unavailable \| not_configured, email, plan, detail, pending_login}` — jamais de jeton |
 | POST | `/api/admin/codex/login` | Démarre la connexion par code appareil : `{id, status: "PENDING", verification_url, user_code, expires_at}`. 502 si `codex app-server` est injoignable |
 | GET | `/api/admin/codex/login/{id}` | Statut (`PENDING`, `COMPLETED`, `EXPIRED`, `DENIED`, `CANCELLED`, `ERROR`) ; le code n’est renvoyé que tant qu’il est `PENDING` |
 | POST | `/api/admin/codex/login/{id}/cancel`, `/api/admin/codex/logout` | Annule la connexion en attente ; déconnecte le compte ChatGPT |
+| GET / POST / DELETE | `/api/admin/fireflies` | « Connexion Fireflies » : `{state: connected \| disconnected, source: admin \| server, email, name, detail}` ; POST `{api_key}` vérifie la clé auprès de Fireflies (400 si refusée) puis l’enregistre chiffrée ; DELETE l’efface. Jamais la clé en réponse |
 
 ## Hors MVP (évolutions prévues)
 

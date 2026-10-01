@@ -643,7 +643,7 @@ def test_loop_keeps_running_after_a_failure(monkeypatch, caplog):
     assert "session report job failed" in caplog.text
 
 
-def test_loop_starts_with_the_app_only_when_reports_are_on(monkeypatch):
+def test_loop_starts_with_the_app_only_when_codex_is_configured(monkeypatch):
     started = []
 
     async def fake_run_forever(factory, interval, clock):
@@ -662,7 +662,14 @@ def test_loop_starts_with_the_app_only_when_reports_are_on(monkeypatch):
     assert interval == 60 and aware and isinstance(gateways, Gateways)
 
     started.clear()
+    # Started with the codex app-server, before Fireflies is connected: it is connected from the admin.
     monkeypatch.setattr(get_config(), "fireflies_api_key", "")
+    with TestClient(main.app):
+        pass
+    assert len(started) == 1
+
+    started.clear()
+    monkeypatch.setattr(get_config(), "codex_app_server_url", "")
     with TestClient(main.app):
         pass
     assert started == []

@@ -15,7 +15,6 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
-from app.config import get_config
 from app.db import SessionLocal
 from app.models import Booking
 from app.services import notifications, session_reports
@@ -36,8 +35,8 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
     to_notify: list[tuple[int, str]] = []
     to_thank: list[int] = []
     reports = 0
-    with_reports = get_config().session_reports_enabled
     with SessionLocal() as db:
+        with_reports = session_reports.enabled(db)
         finished = db.scalars(
             select(Booking)
             .where(Booking.status == "confirmed", Booking.end_datetime <= now)

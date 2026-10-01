@@ -51,20 +51,6 @@ def test_gateways_follow_fake_integrations_flag(monkeypatch, fresh_deps, fake, e
     [
         ({}, False),
         ({"fireflies_api_key": "k"}, False),
-        ({"codex_app_server_url": "ws://codex:4500"}, False),
-        ({"fireflies_api_key": "k", "codex_app_server_url": "ws://codex:4500"}, True),
-        ({"fake_integrations": True}, True),
-    ],
-)
-def test_session_reports_need_fireflies_and_codex(values, enabled):
-    assert Config(**values).session_reports_enabled is enabled
-
-
-@pytest.mark.parametrize(
-    "values, enabled",
-    [
-        ({}, False),
-        ({"fireflies_api_key": "k"}, False),
         ({"codex_app_server_url": "ws://codex:4500"}, True),
         ({"fake_integrations": True}, True),
     ],
