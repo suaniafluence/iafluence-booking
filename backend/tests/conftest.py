@@ -47,6 +47,10 @@ class FakeCalendar:
         self.deleted: list[str] = []
         self.deleted_from: list[str] = []
         self.freebusy_calls: list[list[str]] = []
+        # Printable calendar: events per calendar id as (start, end, tentative); ids in list_errors cannot be listed.
+        self.listed: dict[str, list] = {}
+        self.list_errors: set[str] = set()
+        self.list_calls: list[str] = []
         self.fail_create = False
         self.create_delay = 0.0
         # Google shows created events in free/busy; False simulates its propagation delay.
@@ -66,6 +70,14 @@ class FakeCalendar:
                 out += [Interval(ev["start"], ev["end"]) for ev in self.events if ev["calendar_id"] in calendar_ids]
         # Like Google: only busy periods intersecting the requested range.
         return [b for b in out if b.start < time_max and b.end > time_min]
+
+    def busy_events(self, calendar_id, time_min, time_max, tz):
+        from app.services.calendar_service import BusyEvent, CalendarUnavailable
+
+        self.list_calls.append(calendar_id)
+        if calendar_id in self.list_errors:
+            raise CalendarUnavailable("fake: free/busy only")
+        return [BusyEvent(*ev) for ev in self.listed.get(calendar_id, []) if ev[0] < time_max and ev[1] > time_min]
 
     def create_event(self, calendar_id, **kw):
         from app.services.calendar_service import CalendarWriteError, CreatedEvent

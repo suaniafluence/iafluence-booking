@@ -34,7 +34,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function send(path: string, init?: RequestInit): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -45,12 +45,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiError(0, "Connexion impossible. Vérifiez votre connexion internet puis réessayez.", "network");
   }
-  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
     const detail = typeof body.detail === "string" ? body.detail : "Une erreur est survenue. Veuillez réessayer.";
     throw new ApiError(res.status, detail, body.code);
   }
-  return body as T;
+  return res;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await send(path, init);
+  return (await res.json().catch(() => ({}))) as T;
 }
 
 const enc = encodeURIComponent;
@@ -106,6 +111,9 @@ export const api = {
   adminCodexCancelLogin: (loginId: number) =>
     request<CodexLogin>(`/api/admin/codex/login/${loginId}/cancel`, { method: "POST" }),
   adminCodexLogout: () => request<{ state: "disconnected" }>("/api/admin/codex/logout", { method: "POST" }),
+  /** « Imprimer mon calendrier » : PDF of every busy period from `start` to `end` (YYYY-MM-DD, both included). */
+  adminCalendarPdf: async (start: string, end: string) =>
+    (await send(`/api/admin/calendar.pdf?start=${enc(start)}&end=${enc(end)}`)).blob(),
 };
 
 /** Served to the logged-in admin only (session cookie on /api/admin). */

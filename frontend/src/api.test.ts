@@ -112,6 +112,23 @@ describe("api", () => {
     });
   });
 
+  it("downloads the printable calendar as a PDF", async () => {
+    const pdf = new Blob(["%PDF-"], { type: "application/pdf" });
+    const fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, blob: () => Promise.resolve(pdf) });
+    vi.stubGlobal("fetch", fetch);
+    await expect(api.adminCalendarPdf("2026-10-05", "2026-10-18")).resolves.toBe(pdf);
+    expect(fetch).toHaveBeenCalledWith("/api/admin/calendar.pdf?start=2026-10-05&end=2026-10-18", {
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    mockFetch(502, { detail: "Un agenda Google ne répond pas." });
+    await expect(api.adminCalendarPdf("a&b", "c")).rejects.toMatchObject({
+      status: 502,
+      message: "Un agenda Google ne répond pas.",
+    });
+  });
+
   it("session report and Codex endpoints", async () => {
     const fetch = mockFetch(200, {});
     const last = () => fetch.mock.lastCall as [string, RequestInit];

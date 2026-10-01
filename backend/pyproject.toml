@@ -21,6 +21,7 @@ dependencies = [
     "httpx>=0.27",
     "websockets>=15",
     "resvg-py>=0.2",
+    "reportlab>=4.2",
 ]
 
 [dependency-groups]

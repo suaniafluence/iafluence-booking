@@ -114,6 +114,18 @@ def test_demo_calendar_recurring_busy_blocks():
     ]
 
 
+def test_demo_calendar_events_add_a_lunch_not_fixed_yet_on_fridays():
+    from app.services.calendar_service import BusyEvent
+
+    events = DemoCalendar().busy_events("x", paris(2026, 10, 5, 0), paris(2026, 10, 11, 23), PARIS)
+    assert events == [
+        BusyEvent(paris(2026, 10, 6, 10), paris(2026, 10, 6, 11)),
+        BusyEvent(paris(2026, 10, 7, 14), paris(2026, 10, 7, 16)),
+        BusyEvent(paris(2026, 10, 8, 10), paris(2026, 10, 8, 11)),
+        BusyEvent(paris(2026, 10, 9, 12), paris(2026, 10, 9, 14), True),
+    ]
+
+
 def test_demo_calendar_created_events_become_busy(caplog):
     caplog.set_level(logging.INFO)
     cal = DemoCalendar()
