@@ -1,6 +1,7 @@
 """GoogleCalendarGateway against a stubbed discovery client (no network)."""
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -358,3 +359,96 @@ def test_gateway_errors_keep_the_cause_for_the_logs():
         GoogleCalendarGateway(lambda: StubApi(exc=OSError("boom"))).free_busy(["a"], T0, T1)
     with pytest.raises(CalendarWriteError, match="^HttpError 403$"):
         _insert(StubApi(exc=RuntimeError("HttpError 403")))
+
+
+# --- busy_events (printable calendar) --------------------------------------------------------------------------
+
+
+class _ListApi:
+    """events().list() returning `pages` one after the other (or raising `exc`)."""
+
+    def __init__(self, pages=(), exc=None):
+        self._pages, self._exc = list(pages), exc
+        self.calls: list[dict] = []
+
+    def events(self):
+        return self
+
+    def list(self, **kw):
+        return _Call(self._pages.pop(0) if self._pages else None, self._exc, self.calls, **kw)
+
+
+PARIS_TZ = ZoneInfo("Europe/Paris")
+
+
+def test_busy_events_reads_only_what_tells_busy_and_follows_pages():
+    from app.services.calendar_service import EVENT_FIELDS, BusyEvent
+
+    api = _ListApi(
+        pages=[
+            {
+                "items": [
+                    {"start": {"dateTime": "2026-10-08T09:00:00+02:00"}, "end": {"dateTime": "2026-10-08T10:00:00+02:00"},
+                     "summary": "Rendez-vous banque"},
+                    {"start": {"dateTime": "2026-10-08T12:00:00Z"}, "end": {"dateTime": "2026-10-08T13:00:00Z"},
+                     "summary": "Déjeuner ??  "},
+                ],
+                "nextPageToken": "p2",
+            },
+            {
+                "items": [
+                    {"start": {"date": "2026-10-09"}, "end": {"date": "2026-10-10"}, "summary": "Salon ?"},
+                    {"start": {"dateTime": "2026-10-08T15:00:00Z"}, "end": {"dateTime": "2026-10-08T16:00:00Z"},
+                     "status": "cancelled"},
+                    {"start": {"dateTime": "2026-10-08T17:00:00Z"}, "end": {"dateTime": "2026-10-08T18:00:00Z"},
+                     "transparency": "transparent"},
+                    {"start": {"dateTime": "2026-10-08T19:00:00Z"}, "end": {"dateTime": "2026-10-08T20:00:00Z"},
+                     "attendees": [{"self": True, "responseStatus": "declined"}]},
+                    {"start": {"dateTime": "2026-10-08T20:00:00Z"}, "end": {"dateTime": "2026-10-08T21:00:00Z"},
+                     "attendees": [{"responseStatus": "declined"}, {"self": True, "responseStatus": "accepted"}],
+                     "transparency": "opaque", "status": "confirmed"},
+                ]
+            },
+        ]
+    )
+    gw = GoogleCalendarGateway(api_factory=lambda: api)
+    t_max = datetime(2026, 10, 12, tzinfo=UTC)
+    events = gw.busy_events("cal-1", T0, t_max, PARIS_TZ)
+
+    assert events == [
+        BusyEvent(datetime(2026, 10, 8, 7, tzinfo=UTC), datetime(2026, 10, 8, 8, tzinfo=UTC), False),
+        BusyEvent(datetime(2026, 10, 8, 12, tzinfo=UTC), datetime(2026, 10, 8, 13, tzinfo=UTC), True),
+        BusyEvent(datetime(2026, 10, 9, tzinfo=PARIS_TZ), datetime(2026, 10, 10, tzinfo=PARIS_TZ), True),
+        BusyEvent(datetime(2026, 10, 8, 20, tzinfo=UTC), datetime(2026, 10, 8, 21, tzinfo=UTC), False),
+    ]
+    first, second = api.calls
+    assert first == {
+        "calendarId": "cal-1",
+        "timeMin": T0.isoformat(),
+        "timeMax": t_max.isoformat(),
+        "singleEvents": True,
+        "maxResults": 2500,
+        "fields": EVENT_FIELDS,
+        "pageToken": None,
+    }
+    assert second["pageToken"] == "p2"
+    # Never descriptions, places, links or the other attendees' addresses.
+    assert EVENT_FIELDS == "nextPageToken,items(start,end,summary,status,transparency,attendees(self,responseStatus))"
+
+
+def test_busy_events_error_hides_calendar_and_titles():
+    gw = GoogleCalendarGateway(api_factory=lambda: _ListApi(exc=RuntimeError("403 cal-secret@group")))
+    with pytest.raises(CalendarUnavailable) as exc:
+        gw.busy_events("cal-secret@group", T0, T0, PARIS_TZ)
+    assert str(exc.value) == "events of a calendar source unavailable: RuntimeError"
+
+
+@pytest.mark.parametrize(
+    "summary, tentative",
+    [("Point ?", True), ("Point??", True), ("Point ???  ", True), ("Point", False), ("Pourquoi ? demain", False),
+     ("", False), (None, False)],
+)
+def test_is_tentative(summary, tentative):
+    from app.services.calendar_service import is_tentative
+
+    assert is_tentative(summary) is tentative

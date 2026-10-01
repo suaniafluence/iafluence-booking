@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from argon2 import PasswordHasher
@@ -22,9 +22,10 @@ from app.schemas import (
     PurchaseHoursIn,
     ReportSettingsIn,
 )
-from app.services import booking_service, codex_login, manual_purchase, notifications, session_reports
+from app.services import booking_service, calendar_print, codex_login, manual_purchase, notifications, session_reports
+from app.services.calendar_service import CalendarUnavailable
 from app.services.codex import CodexUnavailable
-from app.services.settings_service import get_settings
+from app.services.settings_service import busy_calendar_ids, get_settings
 
 router = APIRouter(prefix="/api/admin")
 
@@ -239,6 +240,35 @@ def update_purchase_hours(purchase_id: int, body: PurchaseHoursIn, db: Session =
     purchase.hours_purchased = body.hours_purchased
     db.commit()
     return booking_service.hours_summary(purchase)
+
+
+@router.get("/calendar.pdf", dependencies=[Depends(require_admin)])
+def calendar_pdf(
+    start: date,
+    end: date,
+    db: Session = Depends(get_db),
+    calendar=Depends(get_calendar),
+    now: datetime = Depends(get_now),
+):
+    """« Imprimer mon calendrier » : every calendar, each busy period printed as « Occupé », from `start` to `end`."""
+    if end < start:
+        raise HTTPException(422, "La date de fin doit être le même jour ou après la date de début.")
+    if (end - start).days >= calendar_print.MAX_DAYS:
+        raise HTTPException(422, f"Période trop longue : {calendar_print.MAX_DAYS} jours au plus.")
+    settings = get_settings(db)
+    tz = ZoneInfo(settings.timezone)
+    try:
+        pdf = calendar_print.build_pdf(calendar, busy_calendar_ids(db, settings), start, end, tz, now)
+    except CalendarUnavailable:
+        raise HTTPException(502, "Un agenda Google ne répond pas. Réessayez dans un instant.")
+    return Response(
+        pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="calendrier-{start}-au-{end}.pdf"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 # --- session reports -------------------------------------------------------------------------------------------

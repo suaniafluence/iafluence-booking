@@ -3,6 +3,7 @@ import { api, ApiError, type AdminOverview, type NewClient } from "../api";
 import { CopyButton } from "../components/CopyButton";
 import { Alert, Button, Card, Layout, Spinner } from "../components/Layout";
 import { euros, hm, hours, longDate } from "../format";
+import { CalendarPrint } from "./admin/CalendarPrint";
 import { CodexConnection } from "./admin/CodexConnection";
 import { SessionReports } from "./admin/SessionReports";
 
@@ -121,6 +122,8 @@ function Dashboard({ data, onChange }: { data: AdminOverview; onChange: () => vo
       </div>
 
       <Upcoming upcoming={data.upcoming} onChange={onChange} />
+
+      <CalendarPrint />
 
       <Clients clients={data.clients} onChange={onChange} />
 

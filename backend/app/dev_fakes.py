@@ -22,7 +22,7 @@ from sqlalchemy import select
 
 from app.config import get_config
 from app.services.availability import Interval
-from app.services.calendar_service import CreatedEvent
+from app.services.calendar_service import BusyEvent, CreatedEvent
 from app.services.codex import CodexAccount, CodexNotConnected, DeviceCode
 from app.services.email_service import build_message
 from app.services.fireflies import Sentence, TranscriptMeta
@@ -48,6 +48,16 @@ class DemoCalendar:
             day += timedelta(days=1)
         with self._lock:
             return busy + list(self._events)
+
+    def busy_events(self, calendar_id, time_min: datetime, time_max: datetime, tz):
+        """The same periods, plus a lunch « Déjeuner ? » on Fridays that is not fixed yet."""
+        events = [BusyEvent(i.start, i.end) for i in self.free_busy([calendar_id], time_min, time_max)]
+        day = time_min.astimezone(PARIS).date()
+        while day <= time_max.astimezone(PARIS).date():
+            if day.weekday() == 4:
+                events.append(BusyEvent(datetime.combine(day, time(12), PARIS), datetime.combine(day, time(14), PARIS), True))
+            day += timedelta(days=1)
+        return events
 
     def create_event(self, calendar_id, **kw):
         with self._lock:
