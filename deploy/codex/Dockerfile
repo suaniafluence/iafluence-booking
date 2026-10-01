@@ -3,8 +3,11 @@
 FROM node:22-bookworm-slim
 
 ARG CODEX_VERSION=0.159.2
+# The app-server's device login calls auth.openai.com itself. The slim base image doesn't guarantee a system CA
+# bundle, while the Rust HTTP client used by Codex relies on it (npm, by contrast, ships its own CA roots).
 RUN apt-get update \
- && apt-get install --yes --no-install-recommends bubblewrap \
+ && apt-get install --yes --no-install-recommends bubblewrap ca-certificates \
+ && update-ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && npm install --global "@openai/codex@${CODEX_VERSION}" \
  && npm cache clean --force \
