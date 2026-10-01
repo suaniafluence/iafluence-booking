@@ -173,6 +173,8 @@ export type CodexStatus = {
   plan: string | null;
   detail: string | null;
   pending_login: CodexLogin | null;
+  /** False while FIREFLIES_API_KEY is missing: Codex can be linked, but no report is written yet. */
+  reports_enabled: boolean;
 };
 
 export type NewClient = {

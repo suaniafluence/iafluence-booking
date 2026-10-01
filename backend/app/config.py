@@ -54,6 +54,11 @@ class Config(BaseSettings):
     demo_outbox_dir: str = ""
 
     @property
+    def codex_enabled(self) -> bool:
+        """« Connexion Codex » only needs the codex app-server: the ChatGPT account can be linked before Fireflies."""
+        return self.fake_integrations or bool(self.codex_app_server_url)
+
+    @property
     def session_reports_enabled(self) -> bool:
         return self.fake_integrations or bool(self.fireflies_api_key and self.codex_app_server_url)
 

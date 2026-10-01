@@ -241,7 +241,7 @@ def logins():
 
 def test_codex_status_states(admin, fakes, monkeypatch):
     at(NOW)
-    base = {"email": None, "plan": None, "detail": None, "pending_login": None}
+    base = {"email": None, "plan": None, "detail": None, "pending_login": None, "reports_enabled": True}
     assert admin.get("/api/admin/codex").json() == base | {
         "state": "connected",
         "email": "suan@iafluence.fr",
@@ -254,8 +254,12 @@ def test_codex_status_states(admin, fakes, monkeypatch):
         "state": "unavailable",
         "detail": "codex app-server injoignable (ConnectionRefusedError)",
     }
+    # Codex can be linked before Fireflies is set up.
+    fakes["codex"].unavailable = False
     monkeypatch.setattr(get_config(), "fireflies_api_key", "")
-    assert admin.get("/api/admin/codex").json() == base | {"state": "not_configured"}
+    assert admin.get("/api/admin/codex").json() == base | {"state": "disconnected", "reports_enabled": False}
+    monkeypatch.setattr(get_config(), "codex_app_server_url", "")
+    assert admin.get("/api/admin/codex").json() == base | {"state": "not_configured", "reports_enabled": False}
 
 
 def test_device_login_completes_when_the_app_server_reports_it(admin, fakes):

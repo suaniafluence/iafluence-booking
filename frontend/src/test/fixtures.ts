@@ -152,6 +152,7 @@ export const codexStatus = (over: Partial<CodexStatus> = {}): CodexStatus => ({
   plan: null,
   detail: null,
   pending_login: null,
+  reports_enabled: true,
   ...over,
 });
 

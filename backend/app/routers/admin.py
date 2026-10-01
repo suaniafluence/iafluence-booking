@@ -337,10 +337,16 @@ def _login(db: Session, login_id: int) -> CodexLogin:
 
 @router.get("/codex", dependencies=[Depends(require_admin)])
 def codex_status(db: Session = Depends(get_db), codex=Depends(get_codex), now: datetime = Depends(get_now)):
-    """connected / expired / disconnected / unavailable. Never any token: they stay in the codex container."""
-    if not get_config().session_reports_enabled:
-        return {"state": "not_configured", "email": None, "plan": None, "detail": None, "pending_login": None}
-    return codex_login.status(db, codex, now)
+    """connected / expired / disconnected / unavailable. Never any token: they stay in the codex container.
+
+    reports_enabled: false while FIREFLIES_API_KEY is missing (Codex can still be connected beforehand).
+    """
+    cfg = get_config()
+    if not cfg.codex_enabled:
+        out = {"state": "not_configured", "email": None, "plan": None, "detail": None, "pending_login": None}
+    else:
+        out = codex_login.status(db, codex, now)
+    return out | {"reports_enabled": cfg.session_reports_enabled}
 
 
 @router.post("/codex/login", status_code=201, dependencies=[Depends(require_admin)])
