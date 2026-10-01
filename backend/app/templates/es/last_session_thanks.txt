@@ -1,0 +1,14 @@
+Hola, {{ name }}:
+
+Gracias por nuestra última sesión de asesoría en IA y por su confianza.
+
+Su acompañamiento ({{ hours_purchased_label }} de asesoría) ha finalizado.
+
+Si desea continuar con nuevas horas de asesoría, puede hacerlo aquí:
+
+{{ shop_url }}
+
+Un saludo,
+
+{{ consultant_name }}
+IAfluence

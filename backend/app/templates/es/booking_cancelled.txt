@@ -1,0 +1,12 @@
+Hola, {{ name }}:
+
+Su sesión de asesoría en IA del {{ date_long }} ({{ hour_range }}) ha sido cancelada. Le hemos devuelto la hora correspondiente.
+
+Puede elegir un nuevo horario aquí:
+
+{{ booking_url }}
+
+Un saludo,
+
+{{ consultant_name }}
+IAfluence

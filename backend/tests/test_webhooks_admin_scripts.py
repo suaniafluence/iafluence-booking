@@ -48,7 +48,7 @@ def test_async_payment_succeeded_fulfills_and_emails_link(client, fakes):
     assert mail["subject"] == "Réservez votre première session de conseil IA"
     assert "Bonjour Jean Dupont," in mail["body"]
     token = client.get("/api/checkout/cs_test_async").json()["token"]
-    assert f"https://booking.iafluence.test/reservation/{token}" in mail["body"].splitlines()
+    assert f"https://booking.iafluence.test/fr/reservation/{token}" in mail["body"].splitlines()
     assert stored_event("evt_async").note is None
 
 
@@ -525,8 +525,8 @@ def test_booking_emails_full_content(client, fakes, token_for):
     mails = {m["subject"]: m for m in fakes["mailer"].sent}
     assert mails["Votre rendez-vous Conseil IA est confirmé"]["body"] == (
         "Bonjour,\n\nVotre première session de conseil IA est confirmée.\n\n"
-        "Date :\nJeudi 8 octobre 2026\n\nHoraire :\n14h00 - 15h00\n"
-        "Lien visio :\nhttps://meet.google.com/abc-defg-hij\n"
+        "Date :\nJeudi 8 octobre 2026\n\nHoraire :\n14h00 - 15h00\n\n"
+        "Lien visio :\nhttps://meet.google.com/abc-defg-hij\n\n"
         "Vous avez acheté :\n3 heures de conseil\n\n"
         "Après cette première session :\n2 heures resteront à programmer.\n"
         "Un lien pour réserver la séance suivante vous sera envoyé par email après cette session.\n\n"

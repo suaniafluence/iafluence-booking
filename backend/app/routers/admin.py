@@ -160,7 +160,7 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
                 "payment_status": p.payment_status,
                 "manual": p.product_id == manual_purchase.MANUAL_PRODUCT_ID,
                 "auto_send_next_link": p.customer.auto_send_next_link,
-                "booking_url": notifications.booking_url(tokens[p.id]) if p.id in tokens else None,
+                "booking_url": notifications.booking_url(tokens[p.id], p.locale) if p.id in tokens else None,
                 "created_at": p.created_at.astimezone(tz).isoformat(),
                 "booking": next((booking_dict(b) for b in p.bookings if b.status == "confirmed"), None),
             }
@@ -192,7 +192,10 @@ def add_client(
     )
     if body.send_link:
         background.add_task(notifications.send_booking_link, mailer, created.purchase.id, created.token)
-    return ManualClientOut(purchase_id=created.purchase.id, booking_url=notifications.booking_url(created.token))
+    return ManualClientOut(
+        purchase_id=created.purchase.id,
+        booking_url=notifications.booking_url(created.token, created.purchase.locale),
+    )
 
 
 @router.patch("/customers/{customer_id}", dependencies=[Depends(require_admin)])

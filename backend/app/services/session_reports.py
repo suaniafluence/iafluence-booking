@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, defer, joinedload
 
 from app.config import get_config
 from app.db import SessionLocal
+from app.i18n import text
 from app.models import Booking, SessionReport
 from app.services import formatting as fmt
 from app.services import notifications, report_content
@@ -43,10 +44,11 @@ CLAIM_MARGIN = timedelta(minutes=5)
 MAX_SUMMARY_ATTEMPTS = 2
 IMAGE_CID = "compte-rendu"
 
-SUBJECT_NEXT = "Compte rendu de votre session et réservation de la suivante"
-SUBJECT_LAST = "Compte rendu de votre dernière session de conseil IA"
-SUBJECT_NEXT_V1 = "Réservez votre prochaine session de conseil IA"
-SUBJECT_LAST_V1 = "Merci pour votre accompagnement Conseil IA"
+# French subjects (other languages: app.i18n).
+SUBJECT_NEXT = text("fr", "subject_report_next")
+SUBJECT_LAST = text("fr", "subject_report_last")
+SUBJECT_NEXT_V1 = text("fr", "subject_next_link")
+SUBJECT_LAST_V1 = text("fr", "subject_last_thanks")
 ALERT_SUBJECT = "COMPTE RENDU — action requise"
 RETRY_HINT = "Cliquez sur « Relancer » dans l'admin, ou sur « Créer le brouillon sans résumé »."
 
@@ -103,8 +105,9 @@ def create_for(db: Session, booking: Booking, now: datetime) -> None:
 # --- emails ------------------------------------------------------------------------------------------------------
 
 
-def summary_sections(summary: dict) -> list[tuple[str, list[str]]]:
-    return [(title, summary.get(key) or []) for key, title in report_content.SECTIONS if summary.get(key)]
+def summary_sections(summary: dict, locale: str = "fr") -> list[tuple[str, list[str]]]:
+    titles = report_content.SECTION_TITLES[locale]
+    return [(titles[key], summary.get(key) or []) for key, _ in report_content.SECTIONS if summary.get(key)]
 
 
 def compose(db: Session, report: SessionReport, now: datetime, *, with_summary: bool, force_draft: bool = False):
@@ -112,6 +115,7 @@ def compose(db: Session, report: SessionReport, now: datetime, *, with_summary: 
     booking = report.booking
     purchase, customer = booking.purchase, booking.customer
     settings = get_settings(db)
+    locale = purchase.locale
     last = purchase.hours_remaining < 1
     reason = None
     token = None
@@ -128,27 +132,30 @@ def compose(db: Session, report: SessionReport, now: datetime, *, with_summary: 
     ctx = {
         "name": customer.name,
         "last": last,
-        "hours_remaining_label": fmt.hours(purchase.hours_remaining),
-        "hours_purchased_label": fmt.hours(purchase.hours_purchased),
-        "booking_url": notifications.booking_url(token) if token else None,
+        "hours_remaining": purchase.hours_remaining,
+        "hours_remaining_label": fmt.hours(purchase.hours_remaining, locale),
+        "hours_purchased_label": fmt.hours(purchase.hours_purchased, locale),
+        "booking_url": notifications.booking_url(token, locale) if token else None,
         "shop_url": get_config().shop_url,
         "consultant_name": settings.consultant_name,
     }
     with_summary = with_summary and report.summary is not None
     html, images = None, {}
     if with_summary:
+        date_long = fmt.long_date(booking.start_datetime, settings.timezone, locale)
         ctx |= {
-            "date_long": fmt.long_date(booking.start_datetime, settings.timezone).lower(),
-            "sections": summary_sections(report.summary),
+            # Mid-sentence: "du jeudi 8 octobre", "del jueves, 8 de octubre", but "on Thursday 8 October".
+            "date_long": date_long if locale == "en" else date_long.lower(),
+            "sections": summary_sections(report.summary, locale),
             "image_cid": IMAGE_CID if report.image_png else None,
         }
-        body = render("session_report.txt", **ctx)
-        html = render("session_report.html", **ctx)
+        body = render(f"{locale}/session_report.txt", **ctx)
+        html = render(f"{locale}/session_report.html", **ctx)
         images = {IMAGE_CID: report.image_png} if report.image_png else {}
-        subject = SUBJECT_LAST if last else SUBJECT_NEXT
+        subject = text(locale, "subject_report_last" if last else "subject_report_next")
     else:
-        body = render("last_session_thanks.txt" if last else "next_session_link.txt", **ctx)
-        subject = SUBJECT_LAST_V1 if last else SUBJECT_NEXT_V1
+        body = render(f"{locale}/{'last_session_thanks' if last else 'next_session_link'}.txt", **ctx)
+        subject = text(locale, "subject_last_thanks" if last else "subject_next_link")
 
     # A generated summary is reviewed before it reaches the client, unless the admin opted out.
     auto = customer.auto_send_next_link and (not with_summary or settings.send_reports_without_review)
@@ -314,6 +321,7 @@ def session_context(db: Session, booking: Booking) -> dict:
         "heures_restantes": purchase.hours_remaining,
         "derniere_seance": purchase.hours_remaining < 1,
         "consultant": settings.consultant_name,
+        "langue": purchase.locale,
     }
 
 

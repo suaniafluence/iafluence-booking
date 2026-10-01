@@ -48,6 +48,9 @@ class Purchase(Base):
     hours_purchased: Mapped[int] = mapped_column(Integer)
     hours_booked: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
     payment_status: Mapped[str] = mapped_column(String(32))  # paid | refunded
+    # Customer-facing language (fr | en | es) and the IANA time zone of the browser used to book.
+    locale: Mapped[str] = mapped_column(String(5), server_default="fr", default="fr")
+    customer_timezone: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     customer: Mapped[Customer] = relationship(back_populates="purchases")

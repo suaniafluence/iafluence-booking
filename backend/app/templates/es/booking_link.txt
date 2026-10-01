@@ -1,0 +1,14 @@
+Hola, {{ name }}:
+
+Gracias por contratar {{ hours_purchased_label }} de asesoría en IA.
+
+Ya puede elegir el día y la hora de su primera sesión de una hora:
+
+{{ booking_url }}
+
+Si ha contratado varias horas, programaremos juntos las siguientes sesiones después de esta primera.
+
+Un saludo,
+
+{{ consultant_name }}
+IAfluence

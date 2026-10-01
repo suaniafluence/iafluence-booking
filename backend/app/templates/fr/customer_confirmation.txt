@@ -6,10 +6,17 @@ Date :
 {{ date_long }}
 
 Horaire :
-{{ hour_range }}
+{{ hour_range }}{{ " (heure de " ~ local_city ~ ")" if paris else "" }}
+
+{% if paris %}
+Heure de Paris :
+{{ paris.date_long }}, {{ paris.hour_range }}
+
+{% endif %}
 {% if meet_url %}
 Lien visio :
 {{ meet_url }}
+
 {% endif %}
 Vous avez acheté :
 {{ hours_purchased_label }} de conseil

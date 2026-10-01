@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import AwareDatetime
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,10 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 
 
+class CheckoutNotFound(booking_service.BookingError):
+    status_code, code, message = 404, "payment_not_found", "Paiement introuvable ou non finalisé."
+
+
 @router.get("/checkout/{session_id}", response_model=CheckoutOut)
 def exchange_checkout(
     session_id: str,
@@ -36,15 +40,15 @@ def exchange_checkout(
 ):
     """Post-payment redirect: verify the Checkout Session with Stripe, return the booking token."""
     if not session_id.startswith("cs_") or len(session_id) > 255:
-        raise HTTPException(404, "Paiement introuvable.")
+        raise CheckoutNotFound()
     try:
         result = stripe_service.fulfill_checkout(db, stripe_gw, session_id)
     except stripe_service.PaymentInvalid as exc:
         log.info("checkout %s refused: %s", session_id, exc)
-        raise HTTPException(404, "Paiement introuvable ou non finalisé.")
+        raise CheckoutNotFound()
     if result.created:
         background.add_task(notifications.send_booking_link, mailer, result.purchase.id, result.token)
-    return CheckoutOut(token=result.token)
+    return CheckoutOut(token=result.token, locale=result.purchase.locale)
 
 
 def _booking_out(booking, tz: str) -> BookingOut:
@@ -67,6 +71,7 @@ def booking_context(token: str, db: Session = Depends(get_db)):
         consultant_name=settings.consultant_name,
         timezone=settings.timezone,
         booking_duration_min=settings.booking_duration_min,
+        locale=purchase.locale,
     )
 
 
@@ -97,7 +102,7 @@ def create_booking(
     mailer=Depends(get_mailer),
     now: datetime = Depends(get_now),
 ):
-    booking = booking_service.book(db, calendar, body.token, body.start, now)
+    booking = booking_service.book(db, calendar, body.token, body.start, now, body.locale, body.timezone)
     background.add_task(notifications.send_booking_confirmations, mailer, booking.id)
     tz = ZoneInfo(get_settings(db).timezone)
     return BookingConfirmedOut(

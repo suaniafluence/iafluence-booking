@@ -1,0 +1,31 @@
+Hello {{ name }},
+
+Thank you for our AI consulting session on {{ date_long }}. Here is the summary.
+{% for title, items in sections %}
+
+{{ title }}
+{% for item in items %}
+- {{ item }}
+{% endfor %}
+{% endfor %}
+{% if image_cid %}
+
+The session infographic is attached to this email.
+{% endif %}
+
+{% if last %}
+Your programme ({{ hours_purchased_label }} of consulting) is now complete. Thank you for your trust.
+
+If you would like to continue with more consulting hours, please visit:
+
+{{ shop_url }}
+{% else %}
+You have {{ hours_remaining_label }} of consulting left. You can now pick a time for your next one-hour session:
+
+{{ booking_url }}
+{% endif %}
+
+Looking forward to speaking with you,
+
+{{ consultant_name }}
+IAfluence

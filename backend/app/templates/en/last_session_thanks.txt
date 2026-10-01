@@ -1,0 +1,14 @@
+Hello {{ name }},
+
+Thank you for our final AI consulting session, and for your trust.
+
+Your programme ({{ hours_purchased_label }} of consulting) is now complete.
+
+If you would like to continue with more consulting hours, please visit:
+
+{{ shop_url }}
+
+All the best,
+
+{{ consultant_name }}
+IAfluence

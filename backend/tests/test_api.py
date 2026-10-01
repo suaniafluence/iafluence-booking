@@ -28,6 +28,7 @@ def test_checkout_exchange_creates_purchase_and_emails_link(client, fakes):
     r = client.get("/api/checkout/cs_test_1")
     assert r.status_code == 200
     token = r.json()["token"]
+    assert r.json()["locale"] == "fr"
     assert len(token) >= 40
     assert "cs_test_1" not in token
 
@@ -36,10 +37,11 @@ def test_checkout_exchange_creates_purchase_and_emails_link(client, fakes):
     assert ctx["purchase"]["hours_purchased"] == 5
     assert ctx["purchase"]["hours_remaining"] == 5
     assert ctx["booking"] is None
+    assert ctx["locale"] == "fr"
 
     [mail] = fakes["mailer"].sent
     assert mail["to"] == "jean@example.com"
-    assert f"/reservation/{token}" in mail["body"]
+    assert f"/fr/reservation/{token}" in mail["body"]
 
 
 def test_checkout_exchange_is_idempotent(client, fakes):

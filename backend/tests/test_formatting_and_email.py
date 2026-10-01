@@ -1,4 +1,4 @@
-"""French formatting, email rendering and Gmail sending — pure, no database."""
+"""Formatting (fr/en/es), email rendering and Gmail sending — pure, no database."""
 
 import base64
 import email
@@ -32,6 +32,25 @@ def test_long_date(dt, expected):
     assert fmt.long_date(dt, TZ) == expected
 
 
+@pytest.mark.parametrize(
+    "locale, expected",
+    [
+        ("fr", "Mercredi 19 août 2026"),
+        ("en", "Wednesday 19 August 2026"),
+        ("es", "Miércoles, 19 de agosto de 2026"),
+    ],
+)
+def test_long_date_localized(locale, expected):
+    assert fmt.long_date(datetime(2026, 8, 19, 9, tzinfo=UTC), TZ, locale) == expected
+
+
+def test_long_date_in_the_customer_time_zone_can_be_another_day():
+    # 16:00 in Paris on Monday is already Tuesday 01:00 in Sydney, and still Monday 11:00 in Santiago.
+    dt = datetime(2026, 10, 5, 14, tzinfo=UTC)
+    assert fmt.long_date(dt, "Australia/Sydney", "en") == "Tuesday 6 October 2026"
+    assert fmt.long_date(dt, "America/Santiago", "es") == "Lunes, 5 de octubre de 2026"
+
+
 def test_hour_range_both_separators_and_timezone_conversion():
     start, end = datetime(2026, 10, 8, 12, 5, tzinfo=UTC), datetime(2026, 10, 8, 13, 5, tzinfo=UTC)
     assert fmt.hour_range(start, end, TZ) == "14h05 - 15h05"
@@ -49,13 +68,30 @@ def test_hours_label(n, expected):
     assert fmt.hours(n) == expected
 
 
+@pytest.mark.parametrize(
+    "locale, one, many", [("fr", "1 heure", "3 heures"), ("en", "1 hour", "3 hours"), ("es", "1 hora", "3 horas")]
+)
+def test_hours_label_localized(locale, one, many):
+    assert (fmt.hours(1, locale), fmt.hours(3, locale)) == (one, many)
+
+
+@pytest.mark.parametrize(
+    "tz, city",
+    [("Australia/Sydney", "Sydney"), ("America/Argentina/Buenos_Aires", "Buenos Aires"), ("UTC", "UTC")],
+)
+def test_tz_city(tz, city):
+    assert fmt.tz_city(tz) == city
+
+
 # --- templates ----------------------------------------------------------------------
 
 
-def _confirmation(**over):
+def _confirmation(locale="fr", **over):
     ctx = dict(
         date_long="Jeudi 8 octobre 2026",
         hour_range="14h00 - 15h00",
+        local_city="Paris",
+        paris=None,
         meet_url="https://meet.google.com/abc",
         hours_purchased_label="2 heures",
         hours_remaining=1,
@@ -64,7 +100,7 @@ def _confirmation(**over):
         first_session=True,
     )
     ctx.update(over)
-    return render("customer_confirmation.txt", **ctx)
+    return render(f"{locale}/customer_confirmation.txt", **ctx)
 
 
 def test_customer_confirmation_singular_and_meet_link():
@@ -78,11 +114,69 @@ def test_customer_confirmation_plural_and_without_meet():
     body = _confirmation(meet_url=None, hours_remaining=3, hours_remaining_label="3 heures")
     assert "3 heures resteront à programmer." in body
     assert "Lien visio" not in body
+    assert "Horaire :\n14h00 - 15h00\n\nVous avez acheté :" in body
+
+
+PARIS_TIME = {"date_long": "Lundi 5 octobre 2026", "hour_range": "16h00 - 17h00"}
+
+
+def test_customer_confirmation_shows_paris_time_only_when_it_differs():
+    assert "Paris" not in _confirmation()
+    body = _confirmation(
+        date_long="Mardi 6 octobre 2026", hour_range="01h00 - 02h00", local_city="Sydney", paris=PARIS_TIME
+    )
+    assert (
+        "Date :\nMardi 6 octobre 2026\n\nHoraire :\n01h00 - 02h00 (heure de Sydney)\n\n"
+        "Heure de Paris :\nLundi 5 octobre 2026, 16h00 - 17h00\n\nLien visio :"
+    ) in body
+
+
+@pytest.mark.parametrize(
+    "locale, expected",
+    [
+        ("en", ["Your first AI consulting session is confirmed.", "01:00 - 02:00 (Sydney time)", "Paris time:",
+                "2 hours still to be scheduled.", "Video call link:"]),
+        ("es", ["Su primera sesión de asesoría en IA está confirmada.", "01:00 - 02:00 (hora de Sydney)",
+                "Hora de París:", "Quedan 2 horas por programar.", "Enlace a la videollamada:"]),
+    ],
+)
+def test_customer_confirmation_translations(locale, expected):
+    body = _confirmation(
+        locale,
+        hour_range="01:00 - 02:00",
+        local_city="Sydney",
+        paris=PARIS_TIME,
+        hours_remaining=2,
+        hours_remaining_label="2 hours" if locale == "en" else "2 horas",
+    )
+    for line in expected:
+        assert line in body
+    assert body.endswith("Suan Tay\nIAfluence\n")
+
+
+def test_spanish_confirmation_singular():
+    assert "Queda 1 hora por programar." in _confirmation("es", hours_remaining=1, hours_remaining_label="1 hora")
+
+
+@pytest.mark.parametrize(
+    "locale, greeting", [("fr", "Bonjour Ana,"), ("en", "Hello Ana,"), ("es", "Hola, Ana:")]
+)
+def test_booking_link_in_every_language(locale, greeting):
+    body = render(
+        f"{locale}/booking_link.txt",
+        name="Ana",
+        product_name="Conseil IA - 2h",
+        hours_purchased_label="2 h",
+        booking_url=f"https://booking.iafluence.fr/{locale}/reservation/tok",
+        consultant_name="Suan Tay",
+    )
+    assert body.startswith(greeting)
+    assert f"\n\nhttps://booking.iafluence.fr/{locale}/reservation/tok\n\n" in body
 
 
 def test_templates_fail_loudly_on_missing_variables():
     with pytest.raises(UndefinedError):
-        render("booking_link.txt", name="x")
+        render("fr/booking_link.txt", name="x")
 
 
 # --- sending ------------------------------------------------------------------------
@@ -235,9 +329,30 @@ def test_send_safely_passes_the_html_part_only_when_there_is_one():
     assert m.calls == [{}, {"html": "<p>B</p>", "images": {"x": b"1"}}]
 
 
-def test_html_templates_are_escaped_text_templates_are_not():
-    assert email_service.render("session_report.html", **_report_ctx("<b>")).count("&lt;b&gt;") == 1
-    assert "<b>" in email_service.render("session_report.txt", **_report_ctx("<b>"))
+@pytest.mark.parametrize("locale", ["fr", "en", "es"])
+def test_html_templates_are_escaped_text_templates_are_not(locale):
+    assert email_service.render(f"{locale}/session_report.html", **_report_ctx("<b>")).count("&lt;b&gt;") == 1
+    assert "<b>" in email_service.render(f"{locale}/session_report.txt", **_report_ctx("<b>"))
+
+
+@pytest.mark.parametrize(
+    "locale, expected",
+    [
+        ("fr", ["Merci pour notre session de conseil IA du jeudi 8 octobre 2026. Voici son compte rendu.",
+                "Il vous reste 2 heures de conseil.", "Réserver ma prochaine session"]),
+        ("en", ["Thank you for our AI consulting session on jeudi 8 octobre 2026. Here is the summary.",
+                "You have 2 heures of consulting left.", "Book my next session"]),
+        ("es", ["Gracias por nuestra sesión de asesoría en IA del jeudi 8 octobre 2026. Aquí tiene el resumen.",
+                "Le quedan 2 heures de asesoría.", "Reservar mi próxima sesión"]),
+    ],
+)
+def test_session_report_html_in_every_language(locale, expected):
+    ctx = _report_ctx("x") | {"last": False, "hours_remaining": 2, "hours_remaining_label": "2 heures",
+                              "booking_url": "https://b/x"}
+    html = email_service.render(f"{locale}/session_report.html", **ctx)
+    assert f'<html lang="{locale}">' in html
+    for text in expected:
+        assert text in html
 
 
 def _report_ctx(item):
@@ -248,6 +363,7 @@ def _report_ctx(item):
         "image_cid": None,
         "last": True,
         "hours_purchased_label": "1 heure",
+        "hours_remaining": 0,
         "hours_remaining_label": "0 heure",
         "booking_url": None,
         "shop_url": "https://iafluence.fr",

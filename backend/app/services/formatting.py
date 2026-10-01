@@ -1,19 +1,36 @@
-"""French date/time formatting that does not depend on the OS locale."""
+"""Date/time formatting (fr, en, es) that does not depend on the OS locale."""
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
-MOIS = [
-    "janvier", "février", "mars", "avril", "mai", "juin",
-    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
-]
+WEEKDAYS = {
+    "fr": ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"],
+    "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    "es": ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"],
+}
+MONTHS = {
+    "fr": [
+        "janvier", "février", "mars", "avril", "mai", "juin",
+        "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+    ],
+    "en": [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ],
+    "es": [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    ],
+}
 
 
-def long_date(dt: datetime, tz: str) -> str:
-    """'Jeudi 8 octobre 2026'"""
+def long_date(dt: datetime, tz: str, locale: str = "fr") -> str:
+    """'Jeudi 8 octobre 2026' · 'Thursday 8 October 2026' · 'Jueves, 8 de octubre de 2026'"""
     d = dt.astimezone(ZoneInfo(tz))
-    return f"{JOURS[d.weekday()].capitalize()} {d.day} {MOIS[d.month - 1]} {d.year}"
+    weekday, month = WEEKDAYS[locale][d.weekday()].capitalize(), MONTHS[locale][d.month - 1]
+    if locale == "es":
+        return f"{weekday}, {d.day} de {month} de {d.year}"
+    return f"{weekday} {d.day} {month} {d.year}"
 
 
 def hour_range(start: datetime, end: datetime, tz: str, sep: str = "h") -> str:
@@ -27,5 +44,14 @@ def short_date(dt: datetime, tz: str) -> str:
     return dt.astimezone(ZoneInfo(tz)).strftime("%d/%m/%Y")
 
 
-def hours(n: int) -> str:
-    return f"{n} heure" if n == 1 else f"{n} heures"
+HOUR_WORDS = {"fr": ("heure", "heures"), "en": ("hour", "hours"), "es": ("hora", "horas")}
+
+
+def hours(n: int, locale: str = "fr") -> str:
+    one, many = HOUR_WORDS[locale]
+    return f"{n} {one if n == 1 else many}"
+
+
+def tz_city(tz: str) -> str:
+    """'America/Argentina/Buenos_Aires' -> 'Buenos Aires'"""
+    return tz.rsplit("/", 1)[-1].replace("_", " ")

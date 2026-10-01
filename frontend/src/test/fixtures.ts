@@ -16,6 +16,7 @@ export const context = (over: Partial<BookingContext> = {}): BookingContext => (
   consultant_name: "Suan Tay",
   timezone: "Europe/Paris",
   booking_duration_min: 60,
+  locale: "fr",
   ...over,
 });
 

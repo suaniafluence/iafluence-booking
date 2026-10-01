@@ -1,6 +1,10 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Link, useInRouterContext, useLocation, useParams } from "react-router-dom";
+import { isLang, LANG_NAMES, LANGS, useI18n } from "../i18n";
 
 export function Layout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
+  const { t } = useI18n();
+  const inRouter = useInRouterContext(); // the admin page is also rendered on its own
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-slate-200 bg-white">
@@ -8,13 +12,43 @@ export function Layout({ children, wide = false }: { children: ReactNode; wide?:
           <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-900 text-sm font-bold text-white">IA</span>
           <div className="leading-tight">
             <div className="font-semibold text-slate-900">IAfluence</div>
-            <div className="text-xs text-slate-500">Sessions de conseil IA</div>
+            <div className="text-xs text-slate-500">{t.tagline}</div>
           </div>
+          {inRouter && <LanguageSwitcher />}
         </div>
       </header>
       <main className={`mx-auto w-full ${wide ? "max-w-6xl" : "max-w-2xl"} flex-1 px-4 py-8 sm:py-12`}>{children}</main>
       <footer className="py-6 text-center text-xs text-slate-400">© IAfluence</footer>
     </div>
+  );
+}
+
+/** Same page in another language: only the /fr|en|es prefix changes, the booking step is kept. */
+function LanguageSwitcher() {
+  const { lang } = useParams();
+  const { pathname, search } = useLocation();
+  const { t } = useI18n();
+  if (!isLang(lang)) return null;
+  const rest = pathname.slice(lang.length + 1);
+  return (
+    <nav aria-label={t.languages} className="ml-auto flex gap-1 text-xs font-semibold">
+      {LANGS.map((l) => (
+        <Link
+          key={l}
+          to={`/${l}${rest}${search}`}
+          replace
+          lang={l}
+          hrefLang={l}
+          aria-label={LANG_NAMES[l]}
+          aria-current={l === lang ? "true" : undefined}
+          className={`rounded-md px-2 py-1 transition ${
+            l === lang ? "bg-brand-50 text-brand-700" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          }`}
+        >
+          {l.toUpperCase()}
+        </Link>
+      ))}
+    </nav>
   );
 }
 

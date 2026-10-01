@@ -152,11 +152,11 @@ def test_summary_is_drafted_with_the_infographic(finished, fakes, gw, caplog):
         "L'infographie de la séance est jointe à cet email.\n\n"
         "Il vous reste 2 heures de conseil. Vous pouvez dès maintenant choisir le créneau de votre prochaine "
         "session de 1 heure :\n\n"
-        f"https://booking.iafluence.test/reservation/{token}\n\n"
+        f"https://booking.iafluence.test/fr/reservation/{token}\n\n"
         "À bientôt,\n\nSuan Tay\nIAfluence\n"
     )
     assert 'src="cid:compte-rendu"' in mail["html"] and "Choix de l&#39;outil" in mail["html"]
-    assert f'href="https://booking.iafluence.test/reservation/{token}"' in mail["html"]
+    assert f'href="https://booking.iafluence.test/fr/reservation/{token}"' in mail["html"]
     assert list(mail["images"]) == ["compte-rendu"] and mail["images"]["compte-rendu"] == r.image_png
     assert fakes["mailer"].sent == []
 
@@ -340,7 +340,7 @@ def test_no_transcript_after_6_hours_falls_back_to_the_v1_email_and_alerts(finis
     assert r.error == "Aucune transcription Fireflies au bout de 6 h."
     [mail] = fakes["mailer"].drafts
     assert mail["subject"] == session_reports.SUBJECT_NEXT_V1 and "html" not in mail
-    assert f"https://booking.iafluence.test/reservation/{token}" in mail["body"].splitlines()
+    assert f"https://booking.iafluence.test/fr/reservation/{token}" in mail["body"].splitlines()
     [warn] = alerts(fakes)
     assert warn["to"] == "admin@iafluence.test"
     assert warn["body"] == (

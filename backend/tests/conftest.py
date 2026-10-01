@@ -217,7 +217,9 @@ class FakeStripe:
             raise ValueError("bad signature")
         return json.loads(payload)
 
-    def add_session(self, session_id, *, hours=5, paid=True, email="jean@example.com", name="Jean Dupont", pi=None):
+    def add_session(
+        self, session_id, *, hours=5, paid=True, email="jean@example.com", name="Jean Dupont", pi=None, **extra
+    ):
         metadata = {"hours": str(hours)} if hours is not None else {}
         self.sessions[session_id] = {
             "id": session_id,
@@ -236,6 +238,7 @@ class FakeStripe:
                     }
                 ]
             },
+            **extra,
         }
         return self.sessions[session_id]
 

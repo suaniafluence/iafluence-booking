@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.config import get_config
+from app.i18n import checkout_locale
 from app.models import BookingToken, Customer, Purchase
 from app.services import tokens
 
@@ -64,6 +65,7 @@ class CheckoutInfo:
     product_id: str
     product_name: str
     hours: int
+    locale: str
 
 
 def _as_id(value: Any) -> str | None:
@@ -117,6 +119,7 @@ def parse_checkout(session: dict[str, Any]) -> CheckoutInfo:
         product_id=product_id,
         product_name=product_name,
         hours=hours,
+        locale=checkout_locale(session),
     )
 
 
@@ -159,6 +162,7 @@ def fulfill_checkout(db: Session, stripe_gw: StripeGateway, session_id: str) -> 
             hours_purchased=info.hours,
             hours_booked=0,
             payment_status="paid",
+            locale=info.locale,
         )
         .on_conflict_do_nothing(index_elements=[Purchase.stripe_checkout_session_id])
         .returning(Purchase.id)
