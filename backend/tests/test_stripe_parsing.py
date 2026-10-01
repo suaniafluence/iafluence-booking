@@ -43,7 +43,13 @@ def test_extracts_and_normalises_every_field():
         product_id="prod_5h",
         product_name="Conseil IA - 5h",
         hours=5,
+        locale="fr",
     )
+
+
+@pytest.mark.parametrize("over, locale", [({"locale": "en"}, "en"), ({"client_reference_id": "es"}, "es")])
+def test_language_chosen_on_the_website_is_kept(over, locale):
+    assert parse_checkout(session(**over)).locale == locale
 
 
 def test_expanded_payment_intent_object_is_reduced_to_its_id():

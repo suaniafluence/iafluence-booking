@@ -1,0 +1,31 @@
+Hola, {{ name }}:
+
+Gracias por nuestra sesión de asesoría en IA del {{ date_long }}. Aquí tiene el resumen.
+{% for title, items in sections %}
+
+{{ title }}
+{% for item in items %}
+- {{ item }}
+{% endfor %}
+{% endfor %}
+{% if image_cid %}
+
+Adjuntamos a este correo la infografía de la sesión.
+{% endif %}
+
+{% if last %}
+Su acompañamiento ({{ hours_purchased_label }} de asesoría) ha finalizado. Gracias por su confianza.
+
+Si desea continuar con nuevas horas de asesoría, puede hacerlo aquí:
+
+{{ shop_url }}
+{% else %}
+Le {{ "queda" if hours_remaining == 1 else "quedan" }} {{ hours_remaining_label }} de asesoría. Ya puede elegir el día y la hora de su próxima sesión de una hora:
+
+{{ booking_url }}
+{% endif %}
+
+Un saludo,
+
+{{ consultant_name }}
+IAfluence

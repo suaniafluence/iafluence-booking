@@ -2,22 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, ApiError, type BookingContext, type BookingInfo, type Slot } from "../api";
 import { Alert, Button, Card, HoursSummary, Layout, Spinner } from "../components/Layout";
-import { dayKey, hm, hours, longDate, shortDay } from "../format";
-
-export const CANCELLATION_POLICY =
-  "Toute séance réservée est due. Vous pouvez la déplacer gratuitement jusqu’à 24 h avant son début en répondant à " +
-  "l’email de confirmation ; passé ce délai, ou en cas d’absence, l’heure est considérée comme consommée.";
+import { clock, dayKey, hm, hours, longDate, sameAsParis, shortDay, tzCity } from "../format";
+import { errorText, useI18n } from "../i18n";
 
 type Step =
   | { kind: "welcome" }
-  | { kind: "pick"; notice?: string }
+  | { kind: "pick"; notice?: ApiError }
   | { kind: "confirm"; slot: Slot }
   | { kind: "done"; booking: BookingInfo; hoursPurchased: number; hoursRemaining: number };
 
 export default function Reservation() {
   const { token = "" } = useParams();
+  const { t } = useI18n();
+  // Slots are shown on the visitor's own clock (Sydney, Santiago…), with Paris time alongside.
+  const tz = useMemo(() => clock.timeZone(), []);
   const [ctx, setCtx] = useState<BookingContext | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [step, setStep] = useState<Step>({ kind: "welcome" });
 
   useEffect(() => {
@@ -34,21 +34,18 @@ export default function Reservation() {
           });
         }
       })
-      .catch((e: ApiError) => setLoadError(e.message));
+      .catch((e: ApiError) => setLoadError(e));
   }, [token]);
 
   if (loadError) {
     return (
       <Layout>
         <Card>
-          <h1 className="text-xl font-semibold text-slate-900">Lien de réservation indisponible</h1>
+          <h1 className="text-xl font-semibold text-slate-900">{t.booking.unavailableTitle}</h1>
           <div className="mt-4">
-            <Alert>{loadError}</Alert>
+            <Alert>{errorText(t, loadError)}</Alert>
           </div>
-          <p className="mt-4 text-sm text-slate-600">
-            Vérifiez que vous utilisez bien le lien reçu par email après votre paiement. En cas de problème, répondez
-            simplement à cet email.
-          </p>
+          <p className="mt-4 text-sm text-slate-600">{t.booking.unavailableHelp}</p>
         </Card>
       </Layout>
     );
@@ -56,7 +53,7 @@ export default function Reservation() {
   if (!ctx) {
     return (
       <Layout>
-        <Spinner label="Chargement de votre réservation…" />
+        <Spinner label={t.booking.loading} />
       </Layout>
     );
   }
@@ -65,15 +62,16 @@ export default function Reservation() {
     <Layout>
       {step.kind === "welcome" && <Welcome ctx={ctx} onNext={() => setStep({ kind: "pick" })} />}
       {step.kind === "pick" && (
-        <SlotPicker token={token} notice={step.notice} onPick={(slot) => setStep({ kind: "confirm", slot })} />
+        <SlotPicker token={token} tz={tz} notice={step.notice} onPick={(slot) => setStep({ kind: "confirm", slot })} />
       )}
       {step.kind === "confirm" && (
         <Confirm
           token={token}
+          tz={tz}
           ctx={ctx}
           slot={step.slot}
           onBack={() => setStep({ kind: "pick" })}
-          onTaken={(msg) => setStep({ kind: "pick", notice: msg })}
+          onTaken={(err) => setStep({ kind: "pick", notice: err })}
           onDone={(b) =>
             setStep({
               kind: "done",
@@ -87,6 +85,7 @@ export default function Reservation() {
       {step.kind === "done" && (
         <Done
           ctx={ctx}
+          tz={tz}
           booking={step.booking}
           hoursPurchased={step.hoursPurchased}
           hoursRemaining={step.hoursRemaining}
@@ -97,20 +96,26 @@ export default function Reservation() {
 }
 
 function Welcome({ ctx, onNext }: { ctx: BookingContext; onNext: () => void }) {
+  const { lang, t } = useI18n();
   const p = ctx.purchase;
   if (p.hours_remaining === 0) {
     return (
       <Card>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Toutes vos heures ont été utilisées</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.allUsed.title}</h1>
         <p className="mt-4 text-slate-600">
-          Merci pour votre confiance. Pour poursuivre avec de nouvelles heures de conseil, rendez-vous sur{" "}
-          <a className="text-brand-600 underline" href="https://iafluence.fr">
-            iafluence.fr
-          </a>
-          .
+          {t.allUsed.body(
+            <a className="text-brand-600 underline" href="https://iafluence.fr">
+              iafluence.fr
+            </a>,
+          )}
         </p>
         <div className="mt-6">
-          <HoursSummary rows={[["Heures achetées", hours(p.hours_purchased)], ["Heures restantes", hours(0)]]} />
+          <HoursSummary
+            rows={[
+              [t.summary.purchased, hours(p.hours_purchased, lang)],
+              [t.summary.remaining, hours(0, lang)],
+            ]}
+          />
         </div>
       </Card>
     );
@@ -119,44 +124,52 @@ function Welcome({ ctx, onNext }: { ctx: BookingContext; onNext: () => void }) {
   const next = p.hours_booked > 0;
   return (
     <Card>
-      <p className="text-sm font-medium text-brand-600">{next ? "Conseil IA" : "Paiement reçu"}</p>
+      <p className="text-sm font-medium text-brand-600">{next ? t.welcome.nextKicker : t.welcome.kicker}</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-        {next ? "Réservez votre prochaine session" : "Votre conseil IA est confirmé"}
+        {next ? t.welcome.nextTitle : t.welcome.title}
       </h1>
       <div className="mt-4 space-y-2 text-slate-600">
         {next ? (
-          <p>Choisissez le créneau de votre prochaine session de conseil de 1 heure.</p>
+          <p>{t.welcome.nextChoose}</p>
         ) : (
           <>
-            <p>Votre paiement a bien été reçu.</p>
-            <p>Choisissez maintenant le créneau de votre première session de conseil de 1 heure.</p>
-            <p>
-              Si vous avez acheté plusieurs heures, un lien pour réserver la séance suivante vous sera envoyé par email
-              après chaque session.
-            </p>
+            <p>{t.welcome.received}</p>
+            <p>{t.welcome.choose}</p>
+            <p>{t.welcome.next}</p>
           </>
         )}
       </div>
       <div className="mt-6">
         <HoursSummary
           rows={[
-            ["Prestation", "Conseil IA"],
-            ["Heures achetées", hours(p.hours_purchased)],
-            [next ? "Prochaine session" : "Première session", "1 h"],
-            ["Heures restantes après cette session", hours(p.hours_remaining - 1)],
+            [t.summary.service, t.summary.serviceName],
+            [t.summary.purchased, hours(p.hours_purchased, lang)],
+            [next ? t.summary.nextSession : t.summary.firstSession, hours(1, lang)],
+            [t.summary.remainingAfter, hours(p.hours_remaining - 1, lang)],
           ]}
         />
       </div>
       <Button className="mt-8 w-full sm:w-auto" onClick={onNext}>
-        Choisir mon créneau
+        {t.welcome.cta}
       </Button>
     </Card>
   );
 }
 
-function SlotPicker({ token, notice, onPick }: { token: string; notice?: string; onPick: (s: Slot) => void }) {
+function SlotPicker({
+  token,
+  tz,
+  notice,
+  onPick,
+}: {
+  token: string;
+  tz: string;
+  notice?: ApiError;
+  onPick: (s: Slot) => void;
+}) {
+  const { lang, t } = useI18n();
   const [slots, setSlots] = useState<Slot[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
   const [day, setDay] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -165,59 +178,58 @@ function SlotPicker({ token, notice, onPick }: { token: string; notice?: string;
     api
       .availability(token)
       .then((r) => setSlots(r.slots))
-      .catch((e: ApiError) => setError(e.message));
+      .catch((e: ApiError) => setError(e));
   }, [token]);
 
   useEffect(load, [load]);
 
+  // Grouped by the visitor's calendar day: 16:00 in Paris on Monday is Tuesday 01:00 in Sydney.
   const byDay = useMemo(() => {
     const map = new Map<string, Slot[]>();
     for (const s of slots ?? []) {
-      const k = dayKey(s.start);
+      const k = dayKey(s.start, tz);
       map.set(k, [...(map.get(k) ?? []), s]);
     }
     return map;
-  }, [slots]);
+  }, [slots, tz]);
 
   const days = [...byDay.keys()];
   const selectedDay = day && byDay.has(day) ? day : days[0];
+  const parisClock = (slots ?? []).every((s) => sameAsParis(s.start, tz));
 
   return (
     <Card>
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Choisissez votre créneau</h1>
-      <p className="mt-1 text-sm text-slate-500">Session de 1 heure · horaires à l’heure de Paris</p>
+      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.picker.title}</h1>
+      <p className="mt-1 text-sm text-slate-500">{parisClock ? t.picker.parisTimes : t.picker.localTimes(tzCity(tz))}</p>
 
       {notice && (
         <div className="mt-5">
-          <Alert>{notice}</Alert>
+          <Alert>{errorText(t, notice)}</Alert>
         </div>
       )}
 
       {error && (
         <div className="mt-6 space-y-4">
-          <Alert>{error}</Alert>
+          <Alert>{errorText(t, error)}</Alert>
           <Button variant="secondary" onClick={load}>
-            Réessayer
+            {t.retry}
           </Button>
         </div>
       )}
 
-      {!error && slots === null && <Spinner label="Recherche des disponibilités…" />}
+      {!error && slots === null && <Spinner label={t.picker.searching} />}
 
       {slots !== null && days.length === 0 && (
         <div className="mt-6">
-          <Alert tone="info">
-            Aucun créneau n’est disponible pour le moment. Revenez un peu plus tard ou répondez à l’email de confirmation
-            pour convenir d’un horaire.
-          </Alert>
+          <Alert tone="info">{t.picker.none}</Alert>
         </div>
       )}
 
       {days.length > 0 && selectedDay && (
         <>
-          <div className="-mx-2 mt-6 flex gap-2 overflow-x-auto px-2 pb-2" role="tablist" aria-label="Jours disponibles">
+          <div className="-mx-2 mt-6 flex gap-2 overflow-x-auto px-2 pb-2" role="tablist" aria-label={t.picker.days}>
             {days.map((k) => {
-              const d = shortDay(byDay.get(k)![0].start);
+              const d = shortDay(byDay.get(k)![0].start, { lang, tz });
               const active = k === selectedDay;
               return (
                 <button
@@ -239,17 +251,28 @@ function SlotPicker({ token, notice, onPick }: { token: string; notice?: string;
             })}
           </div>
 
-          <h2 className="mt-6 font-medium text-slate-900">{longDate(byDay.get(selectedDay)![0].start, false)}</h2>
+          <h2 className="mt-6 font-medium text-slate-900">
+            {longDate(byDay.get(selectedDay)![0].start, { withYear: false, lang, tz })}
+          </h2>
           <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {byDay.get(selectedDay)!.map((s) => (
-              <button
-                key={s.start}
-                onClick={() => onPick(s)}
-                className="rounded-xl bg-white py-3 text-sm font-semibold text-brand-700 ring-1 ring-slate-200 transition hover:bg-brand-50 hover:ring-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-              >
-                {hm(s.start)}
-              </button>
-            ))}
+            {byDay.get(selectedDay)!.map((s) => {
+              const local = hm(s.start, { tz });
+              const paris = sameAsParis(s.start, tz)
+                ? null
+                : // The Paris weekday is added when Paris is still on another day.
+                  `${t.time.paris} ${dayKey(s.start) !== dayKey(s.start, tz) ? `${shortDay(s.start, { lang }).weekday} ` : ""}${hm(s.start)}`;
+              return (
+                <button
+                  key={s.start}
+                  onClick={() => onPick(s)}
+                  aria-label={paris ? `${local} (${paris})` : undefined}
+                  className="rounded-xl bg-white py-3 text-sm font-semibold text-brand-700 ring-1 ring-slate-200 transition hover:bg-brand-50 hover:ring-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                >
+                  {local}
+                  {paris && <span className="block text-xs font-normal text-slate-500">{paris}</span>}
+                </button>
+              );
+            })}
           </div>
         </>
       )}
@@ -257,8 +280,32 @@ function SlotPicker({ token, notice, onPick }: { token: string; notice?: string;
   );
 }
 
+/** Date and time on the visitor's clock, plus Paris time when it reads differently. */
+function When({ slot, tz, suffix = "" }: { slot: Slot; tz: string; suffix?: string }) {
+  const { lang, t } = useI18n();
+  const paris = !sameAsParis(slot.start, tz);
+  return (
+    <>
+      {paris && <p className="text-xs font-medium uppercase tracking-wide opacity-70">{t.time.localClock(tzCity(tz))}</p>}
+      <p className="text-lg font-semibold">{longDate(slot.start, { lang, tz })}</p>
+      <p className="mt-1">
+        {hm(slot.start, { tz })} - {hm(slot.end, { tz })}
+        {suffix}
+      </p>
+      {paris && (
+        <p className="mt-2 text-sm opacity-70">
+          {t.time.parisClock(
+            `${longDate(slot.start, { withYear: false, capitalize: false, lang })}, ${hm(slot.start)} - ${hm(slot.end)}`,
+          )}
+        </p>
+      )}
+    </>
+  );
+}
+
 function Confirm({
   token,
+  tz,
   ctx,
   slot,
   onBack,
@@ -266,54 +313,51 @@ function Confirm({
   onDone,
 }: {
   token: string;
+  tz: string;
   ctx: BookingContext;
   slot: Slot;
   onBack: () => void;
-  onTaken: (msg: string) => void;
+  onTaken: (err: ApiError) => void;
   onDone: (b: Awaited<ReturnType<typeof api.book>>) => void;
 }) {
+  const { lang, t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
-      onDone(await api.book(token, slot.start));
+      onDone(await api.book(token, slot.start, lang, tz));
     } catch (e) {
       const err = e as ApiError;
-      if (err.code === "slot_taken" || err.code === "slot_invalid") onTaken(err.message);
+      if (err.code === "slot_taken" || err.code === "slot_invalid") onTaken(err);
       else if (err.code === "already_booked") window.location.reload();
-      else setError(err.message);
+      else setError(err);
       setBusy(false);
     }
   };
 
   return (
     <Card>
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Votre rendez-vous</h1>
-      <div className="mt-6 rounded-xl bg-brand-50 p-5 ring-1 ring-brand-100">
-        <p className="text-lg font-semibold text-brand-900">{longDate(slot.start)}</p>
-        <p className="mt-1 text-brand-900">
-          {hm(slot.start)} - {hm(slot.end)}
-        </p>
-        <p className="mt-3 text-sm text-brand-700">Conseil IA avec {ctx.consultant_name}</p>
+      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.confirm.title}</h1>
+      <div className="mt-6 rounded-xl bg-brand-50 p-5 text-brand-900 ring-1 ring-brand-100">
+        <When slot={slot} tz={tz} />
+        <p className="mt-3 text-sm text-brand-700">{t.confirm.with(ctx.consultant_name)}</p>
       </div>
-      <p className="mt-4 text-sm text-slate-500">
-        L’invitation et le lien de visioconférence seront envoyés à <strong>{ctx.customer.email}</strong>.
-      </p>
-      <p className="mt-2 text-sm text-slate-500">{CANCELLATION_POLICY}</p>
+      <p className="mt-4 text-sm text-slate-500">{t.confirm.sendTo(<strong>{ctx.customer.email}</strong>)}</p>
+      <p className="mt-2 text-sm text-slate-500">{t.policy}</p>
       {error && (
         <div className="mt-4">
-          <Alert>{error}</Alert>
+          <Alert>{errorText(t, error)}</Alert>
         </div>
       )}
       <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row">
         <Button variant="secondary" onClick={onBack} disabled={busy}>
-          Changer de créneau
+          {t.confirm.change}
         </Button>
         <Button onClick={submit} disabled={busy}>
-          {busy ? "Confirmation…" : "Confirmer le rendez-vous"}
+          {busy ? t.confirm.submitting : t.confirm.submit}
         </Button>
       </div>
     </Card>
@@ -322,28 +366,28 @@ function Confirm({
 
 function Done({
   ctx,
+  tz,
   booking,
   hoursPurchased,
   hoursRemaining,
 }: {
   ctx: BookingContext;
+  tz: string;
   booking: BookingInfo;
   hoursPurchased: number;
   hoursRemaining: number;
 }) {
+  const { lang, t } = useI18n();
   return (
     <Card>
       <div className="flex items-center gap-3">
         <span className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100 text-emerald-700" aria-hidden>
           ✓
         </span>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Rendez-vous confirmé</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.done.title}</h1>
       </div>
-      <div className="mt-6 rounded-xl bg-slate-50 p-5">
-        <p className="text-lg font-semibold text-slate-900">{longDate(booking.start)}</p>
-        <p className="mt-1 text-slate-700">
-          {hm(booking.start)} - {hm(booking.end)} · Conseil IA avec {ctx.consultant_name}
-        </p>
+      <div className="mt-6 rounded-xl bg-slate-50 p-5 text-slate-800">
+        <When slot={booking} tz={tz} suffix={` · ${t.confirm.with(ctx.consultant_name)}`} />
         {booking.meet_url && (
           <a
             href={booking.meet_url}
@@ -355,24 +399,18 @@ function Done({
           </a>
         )}
       </div>
-      <p className="mt-4 text-sm text-slate-600">
-        Une invitation calendrier et un email de confirmation ont été envoyés à <strong>{ctx.customer.email}</strong>.
-      </p>
+      <p className="mt-4 text-sm text-slate-600">{t.done.sent(<strong>{ctx.customer.email}</strong>)}</p>
       <div className="mt-6">
         <HoursSummary
           rows={[
-            ["Heures achetées", hours(hoursPurchased)],
-            ["Heures planifiées", hours(hoursPurchased - hoursRemaining)],
-            ["Heures restantes", hours(hoursRemaining)],
+            [t.summary.purchased, hours(hoursPurchased, lang)],
+            [t.summary.scheduled, hours(hoursPurchased - hoursRemaining, lang)],
+            [t.summary.remaining, hours(hoursRemaining, lang)],
           ]}
         />
       </div>
-      <p className="mt-4 text-sm text-slate-500">{CANCELLATION_POLICY}</p>
-      {hoursRemaining > 0 && (
-        <p className="mt-4 text-sm text-slate-500">
-          Un lien pour réserver la séance suivante vous sera envoyé par email après cette session.
-        </p>
-      )}
+      <p className="mt-4 text-sm text-slate-500">{t.policy}</p>
+      {hoursRemaining > 0 && <p className="mt-4 text-sm text-slate-500">{t.done.next}</p>}
     </Card>
   );
 }

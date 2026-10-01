@@ -1,0 +1,14 @@
+Hello {{ name }},
+
+Thank you for purchasing {{ hours_purchased_label }} of AI consulting.
+
+You can now pick a time for your first one-hour session:
+
+{{ booking_url }}
+
+If you purchased more than one hour, we will schedule the following sessions together after this first one.
+
+Looking forward to speaking with you,
+
+{{ consultant_name }}
+IAfluence

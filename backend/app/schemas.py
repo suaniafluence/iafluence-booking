@@ -38,15 +38,20 @@ class BookingContextOut(BaseModel):
     consultant_name: str
     timezone: str
     booking_duration_min: int
+    locale: str
 
 
 class CheckoutOut(BaseModel):
     token: str
+    locale: str
 
 
 class BookingIn(BaseModel):
     token: str
     start: AwareDatetime
+    # Language of the page and IANA time zone of the browser; unknown values are ignored.
+    locale: str | None = Field(None, max_length=16)
+    timezone: str | None = Field(None, max_length=64)
 
 
 class BookingConfirmedOut(BaseModel):

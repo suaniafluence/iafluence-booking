@@ -34,10 +34,15 @@ describe("api", () => {
 
   it("POST endpoints send a JSON body", async () => {
     const fetch = mockFetch(201, { status: "confirmed" });
-    await api.book("tok", "2026-10-08T14:00:00+02:00");
+    await api.book("tok", "2026-10-08T14:00:00+02:00", "en", "Australia/Sydney");
     expect(fetch).toHaveBeenLastCalledWith("/api/bookings", {
       method: "POST",
-      body: JSON.stringify({ token: "tok", start: "2026-10-08T14:00:00+02:00" }),
+      body: JSON.stringify({
+        token: "tok",
+        start: "2026-10-08T14:00:00+02:00",
+        locale: "en",
+        timezone: "Australia/Sydney",
+      }),
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
     });
@@ -73,7 +78,7 @@ describe("api", () => {
 
   it("turns API errors into ApiError with the server message and code", async () => {
     mockFetch(409, { detail: "Créneau pris", code: "slot_taken" });
-    const err = await api.book("t", "s").catch((e) => e);
+    const err = await api.book("t", "s", "fr", "Europe/Paris").catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toBeInstanceOf(Error);
     expect(err).toMatchObject({ status: 409, message: "Créneau pris", code: "slot_taken" });
@@ -81,7 +86,7 @@ describe("api", () => {
 
   it("uses a generic message when the error detail is not a string (e.g. validation errors)", async () => {
     mockFetch(422, { detail: [{ loc: ["body"], msg: "bad" }] });
-    await expect(api.book("t", "s")).rejects.toMatchObject({
+    await expect(api.book("t", "s", "fr", "Europe/Paris")).rejects.toMatchObject({
       status: 422,
       message: "Une erreur est survenue. Veuillez réessayer.",
       code: undefined,
@@ -103,6 +108,7 @@ describe("api", () => {
     await expect(api.context("t")).rejects.toMatchObject({
       status: 0,
       message: "Connexion impossible. Vérifiez votre connexion internet puis réessayez.",
+      code: "network",
     });
   });
 

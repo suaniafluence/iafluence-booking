@@ -1,0 +1,12 @@
+Hello {{ name }},
+
+Your AI consulting session on {{ date_long }} ({{ hour_range }}) has been cancelled. The hour has been credited back to you.
+
+You can choose a new time here:
+
+{{ booking_url }}
+
+Looking forward to speaking with you,
+
+{{ consultant_name }}
+IAfluence

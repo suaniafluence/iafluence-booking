@@ -1,0 +1,37 @@
+Hola:
+
+Su {{ "primera " if first_session }}sesión de asesoría en IA está confirmada.
+
+Fecha:
+{{ date_long }}
+
+Hora:
+{{ hour_range }}{{ " (hora de " ~ local_city ~ ")" if paris else "" }}
+
+{% if paris %}
+Hora de París:
+{{ paris.date_long }}, {{ paris.hour_range }}
+
+{% endif %}
+{% if meet_url %}
+Enlace a la videollamada:
+{{ meet_url }}
+
+{% endif %}
+Ha contratado:
+{{ hours_purchased_label }} de asesoría
+
+Después de esta {{ "primera " if first_session }}sesión:
+{{ "Queda" if hours_remaining == 1 else "Quedan" }} {{ hours_remaining_label }} por programar.
+{% if hours_remaining > 0 %}
+Después de esta sesión le enviaremos por correo un enlace para reservar la siguiente.
+{% endif %}
+
+Toda sesión reservada se considera debida. Puede cambiarla sin coste hasta 24 horas antes de su inicio respondiendo a este correo; pasado ese plazo, o si no se presenta, la hora se dará por consumida.
+
+También le hemos enviado una invitación de calendario.
+
+Un saludo,
+
+{{ consultant_name }}
+IAfluence

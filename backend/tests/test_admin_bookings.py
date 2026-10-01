@@ -54,9 +54,9 @@ def test_cancel_gives_the_hour_back_deletes_the_event_and_emails_the_link(client
     [mail] = fakes["mailer"].sent
     assert (mail["to"], mail["subject"]) == ("marie@example.com", CANCELLED)
     assert mail["body"] == (
-        "Bonjour Marie Martin,\n\nVotre session de conseil IA du Jeudi 8 octobre 2026 (14h00 - 15h00) a été annulée. "
+        "Bonjour Marie Martin,\n\nVotre session de conseil IA du jeudi 8 octobre 2026 (14h00 - 15h00) a été annulée. "
         "L'heure correspondante vous a été recréditée.\n\nVous pouvez choisir un nouveau créneau ici :\n\n"
-        f"https://booking.iafluence.test/reservation/{token}\n\nÀ bientôt,\n\nSuan Tay\nIAfluence\n"
+        f"https://booking.iafluence.test/fr/reservation/{token}\n\nÀ bientôt,\n\nSuan Tay\nIAfluence\n"
     )
 
     # The slot is free again and the client can book it (or another one) with the same link.

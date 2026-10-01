@@ -58,6 +58,24 @@ SECTIONS = [
     ("actions_client", "Vos actions"),
     ("prochaines_etapes", "Prochaines étapes"),
 ]
+# Titles of the same sections in the client's email, by language (the French ones are SECTIONS').
+SECTION_TITLES = {
+    "fr": dict(SECTIONS),
+    "en": {
+        "objectifs": "Goals",
+        "points_abordes": "What we discussed",
+        "decisions": "Decisions",
+        "actions_client": "Your next actions",
+        "prochaines_etapes": "Next steps",
+    },
+    "es": {
+        "objectifs": "Objetivos",
+        "points_abordes": "Temas tratados",
+        "decisions": "Decisiones",
+        "actions_client": "Sus próximas acciones",
+        "prochaines_etapes": "Próximos pasos",
+    },
+}
 
 
 def _string_list(description: str) -> dict:

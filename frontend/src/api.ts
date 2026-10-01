@@ -14,6 +14,7 @@ export type BookingContext = {
   consultant_name: string;
   timezone: string;
   booking_duration_min: number;
+  locale: string;
 };
 
 export type BookingConfirmed = BookingInfo & {
@@ -42,7 +43,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...init?.headers },
     });
   } catch {
-    throw new ApiError(0, "Connexion impossible. Vérifiez votre connexion internet puis réessayez.");
+    throw new ApiError(0, "Connexion impossible. Vérifiez votre connexion internet puis réessayez.", "network");
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -55,11 +56,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const enc = encodeURIComponent;
 
 export const api = {
-  exchangeCheckout: (sessionId: string) => request<{ token: string }>(`/api/checkout/${enc(sessionId)}`),
+  exchangeCheckout: (sessionId: string) => request<{ token: string; locale: string }>(`/api/checkout/${enc(sessionId)}`),
   context: (token: string) => request<BookingContext>(`/api/booking/${enc(token)}`),
   availability: (token: string) => request<{ slots: Slot[] }>(`/api/availability?token=${enc(token)}`),
-  book: (token: string, start: string) =>
-    request<BookingConfirmed>("/api/bookings", { method: "POST", body: JSON.stringify({ token, start }) }),
+  /** `locale` and `timezone` (IANA, from the browser) drive the confirmation email. */
+  book: (token: string, start: string, locale: string, timezone: string) =>
+    request<BookingConfirmed>("/api/bookings", {
+      method: "POST",
+      body: JSON.stringify({ token, start, locale, timezone }),
+    }),
   adminLogin: (password: string) =>
     request<{ status: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) }),
   adminLogout: () => request<{ status: string }>("/api/admin/logout", { method: "POST" }),

@@ -27,7 +27,7 @@ def test_add_client_by_hand_creates_a_bookable_purchase_and_emails_the_link(clie
     assert r.status_code == 201, r.text
     out = r.json()
     token = out["booking_url"].rsplit("/", 1)[1]
-    assert out["booking_url"] == f"https://booking.iafluence.test/reservation/{token}"
+    assert out["booking_url"] == f"https://booking.iafluence.test/fr/reservation/{token}"
 
     with SessionLocal() as db:
         purchase = db.get(Purchase, out["purchase_id"])
@@ -79,7 +79,7 @@ def test_toggle_auto_send_per_client(client, token_for):
     login(client)
     [row] = client.get("/api/admin/overview").json()["clients"]
     assert row["auto_send_next_link"] is False and row["manual"] is False
-    assert row["booking_url"].startswith("https://booking.iafluence.test/reservation/")
+    assert row["booking_url"].startswith("https://booking.iafluence.test/fr/reservation/")
 
     r = client.patch(f"/api/admin/customers/{row['customer_id']}", json={"auto_send_next_link": True})
     assert r.json() == {"customer_id": row["customer_id"], "auto_send_next_link": True}

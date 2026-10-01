@@ -67,7 +67,7 @@ def test_link_to_next_session_is_drafted_once_at_the_end(client, fakes, token_fo
         "Bonjour Marie Martin,\n\nMerci pour notre session de conseil IA.\n\n"
         "Il vous reste 2 heures de conseil. Vous pouvez dès maintenant choisir le créneau de votre prochaine "
         "session de 1 heure :\n\n"
-        f"https://booking.iafluence.test/reservation/{token}\n\n"
+        f"https://booking.iafluence.test/fr/reservation/{token}\n\n"
         "À bientôt,\n\nSuan Tay\nIAfluence\n"
     )
 
@@ -162,7 +162,7 @@ def test_link_uses_the_newest_active_token(client, fakes, token_for):
         db.commit()
     follow_up.process_finished_sessions(fakes["mailer"], END)
     [mail] = next_links(fakes)
-    assert "https://booking.iafluence.test/reservation/tok-new" in mail["body"].splitlines()
+    assert "https://booking.iafluence.test/fr/reservation/tok-new" in mail["body"].splitlines()
 
 
 @pytest.mark.parametrize("hours", [3, 1])

@@ -213,7 +213,8 @@ def demo_infographic(number: int, client: str, synthese: dict) -> str:
 
 
 class DemoStripe:
-    PATTERN = re.compile(r"^cs_demo_(\d+)h_([a-z0-9]+)$")
+    # Optional language suffix, like a payment link opened with ?locale=en: cs_demo_5h_john_en
+    PATTERN = re.compile(r"^cs_demo_(\d+)h_([a-z0-9]+)(?:_(fr|en|es))?$")
 
     def retrieve_checkout_session(self, session_id):
         from app.services.stripe_service import PaymentInvalid
@@ -228,6 +229,7 @@ class DemoStripe:
             "payment_intent": f"pi_demo_{who}",
             "amount_total": 150_00 * hours,
             "currency": "eur",
+            "locale": m.group(3),
             "customer_details": {"email": f"{who}@example.com", "name": who.capitalize() + " Démo"},
             "line_items": {
                 "data": [

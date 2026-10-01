@@ -8,6 +8,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import i18n
 from app.models import Booking, BookingToken, Purchase, Settings
 from app.services import settings_service
 from app.services.availability import (
@@ -140,18 +141,29 @@ def list_availability(
     return available_slots(rules, now, busy + db_busy(db, rng), frm, to)
 
 
-def _event_description(purchase: Purchase, hours_remaining: int) -> str:
-    return (
-        "Session de conseil IA.\n\n"
-        f"Heures achetées : {purchase.hours_purchased} h\n"
-        "Session réservée : 1 h\n"
-        f"Heures restantes : {hours_remaining} h\n\n"
-        "Paiement Stripe :\n"
-        f"{purchase.stripe_payment_id or purchase.stripe_checkout_session_id}"
+def _event_description(purchase: Purchase, hours_remaining: int, settings: Settings) -> str:
+    description = i18n.text(
+        purchase.locale,
+        "event_description",
+        hours_purchased=purchase.hours_purchased,
+        hours_remaining=hours_remaining,
+        payment=purchase.stripe_payment_id or purchase.stripe_checkout_session_id,
     )
+    if purchase.customer_timezone and purchase.customer_timezone != settings.timezone:
+        description += "\n\n" + i18n.text(purchase.locale, "event_timezone", tz=purchase.customer_timezone)
+    return description
 
 
-def book(db: Session, calendar: CalendarGateway, token: str, start: datetime, now: datetime) -> Booking:
+def book(
+    db: Session,
+    calendar: CalendarGateway,
+    token: str,
+    start: datetime,
+    now: datetime,
+    locale: str | None = None,
+    customer_timezone: str | None = None,
+) -> Booking:
+    """`locale` / `customer_timezone`: what the customer used on the booking page (kept for the emails)."""
     tok = resolve_token(db, token)
     purchase_id = tok.purchase_id
 
@@ -193,13 +205,18 @@ def book(db: Session, calendar: CalendarGateway, token: str, start: datetime, no
         db.rollback()
         raise SlotTaken()
 
+    if locale := i18n.normalize_locale(locale):
+        purchase.locale = locale
+    if customer_timezone := i18n.valid_timezone(customer_timezone):
+        purchase.customer_timezone = customer_timezone
+
     customer = purchase.customer
     hours_remaining_after = purchase.hours_remaining - 1
     try:
         event = calendar.create_event(
             settings.booking_calendar_id,
-            summary=f"Conseil IA - {customer.name}",
-            description=_event_description(purchase, hours_remaining_after),
+            summary=i18n.text(purchase.locale, "event_summary", name=customer.name),
+            description=_event_description(purchase, hours_remaining_after, settings),
             start=slot.start.astimezone(rules.tz),
             end=slot.end.astimezone(rules.tz),
             timezone=settings.timezone,

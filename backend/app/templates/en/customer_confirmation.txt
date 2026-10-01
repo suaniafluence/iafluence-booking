@@ -1,0 +1,37 @@
+Hello,
+
+Your {{ "first " if first_session }}AI consulting session is confirmed.
+
+Date:
+{{ date_long }}
+
+Time:
+{{ hour_range }}{{ " (" ~ local_city ~ " time)" if paris else "" }}
+
+{% if paris %}
+Paris time:
+{{ paris.date_long }}, {{ paris.hour_range }}
+
+{% endif %}
+{% if meet_url %}
+Video call link:
+{{ meet_url }}
+
+{% endif %}
+You purchased:
+{{ hours_purchased_label }} of consulting
+
+After this {{ "first " if first_session }}session:
+{{ hours_remaining_label }} still to be scheduled.
+{% if hours_remaining > 0 %}
+After this session, you will receive an email with a link to book the next one.
+{% endif %}
+
+Every booked session is due. You can reschedule free of charge up to 24 hours before it starts by replying to this email; after that, or if you do not attend, the hour counts as used.
+
+You will also receive a calendar invitation.
+
+Looking forward to speaking with you,
+
+{{ consultant_name }}
+IAfluence
