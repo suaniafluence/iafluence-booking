@@ -4,7 +4,7 @@ FROM node:22-bookworm-slim
 
 ARG CODEX_VERSION=0.159.2
 RUN apt-get update \
- && apt-get install --yes --no-install-recommends bubblewrap socat \
+ && apt-get install --yes --no-install-recommends bubblewrap \
  && rm -rf /var/lib/apt/lists/* \
  && npm install --global "@openai/codex@${CODEX_VERSION}" \
  && npm cache clean --force \
@@ -13,6 +13,7 @@ RUN apt-get update \
  && chown codex /codex-home /work
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/codex-entrypoint
+COPY --chmod=644 relay.mjs /usr/local/lib/codex-relay.mjs
 
 USER codex
 # auth.json (OAuth tokens of the ChatGPT account) lives here, on the codex-home volume, readable by this user only.

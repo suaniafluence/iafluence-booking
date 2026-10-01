@@ -30,9 +30,9 @@ services:
         required: false
 
   # Session reports (optional, COMPOSE_PROFILES=codex): codex app-server, logged in with the ChatGPT plan from the admin
-  # (« Connexion Codex »). No published port: only the private Docker network reaches its TCP relay, and Codex still
-  # authenticates the WebSocket with CODEX_WS_TOKEN. Its OAuth tokens stay in the codex-home volume and never reach
-  # the API, the browser or the logs.
+  # (« Connexion Codex »). No published port: only the private Docker network reaches its HTTP/WebSocket relay, and
+  # Codex still authenticates the WebSocket with CODEX_WS_TOKEN. Its OAuth tokens stay in the codex-home volume and
+  # never reach the API, the browser or the logs.
   codex:
     profiles: [codex]
     build:
