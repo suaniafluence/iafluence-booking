@@ -3,7 +3,10 @@
 FROM node:22-bookworm-slim
 
 ARG CODEX_VERSION=0.159.2
-RUN npm install --global "@openai/codex@${CODEX_VERSION}" \
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends bubblewrap \
+ && rm -rf /var/lib/apt/lists/* \
+ && npm install --global "@openai/codex@${CODEX_VERSION}" \
  && npm cache clean --force \
  && useradd --create-home codex \
  && mkdir -p /codex-home /work \
