@@ -107,6 +107,19 @@ def test_collect_falls_back_to_free_busy_for_a_calendar_shared_as_free_busy_only
     assert "travail" not in caplog.text
 
 
+def test_collect_asks_free_busy_month_by_month_over_a_long_period(fakes):
+    cal = fakes["calendar"]
+    cal.list_errors.add("travail")
+    seen = []
+    cal.free_busy = lambda ids, t_min, t_max: seen.append((t_min, t_max)) or []
+    cp.collect(cal, ["travail"], paris(2026, 1, 1, 0), paris(2026, 3, 15, 0), PARIS)
+    assert seen == [
+        (paris(2026, 1, 1, 0), paris(2026, 2, 1, 0)),
+        (paris(2026, 2, 1, 0), paris(2026, 3, 4, 0)),
+        (paris(2026, 3, 4, 0), paris(2026, 3, 15, 0)),
+    ]
+
+
 def test_collect_fails_when_a_calendar_cannot_be_read_at_all(fakes):
     cal = fakes["calendar"]
     cal.list_errors.add("travail")
@@ -266,7 +279,7 @@ def test_calendar_pdf_prints_every_enabled_calendar(client, fakes, drawn):
     "query, message",
     [
         ("start=2026-10-18&end=2026-10-05", "La date de fin doit être le même jour ou après la date de début."),
-        ("start=2026-10-05&end=2027-01-06", "Période trop longue : 93 jours au plus."),
+        ("start=2026-10-05&end=2027-10-06", "Période trop longue : 366 jours au plus."),
     ],
 )
 def test_calendar_pdf_rejects_bad_periods(client, query, message):
