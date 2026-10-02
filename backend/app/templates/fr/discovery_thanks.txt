@@ -1,0 +1,14 @@
+Bonjour {{ name }},
+
+Merci pour notre appel découverte du {{ date_long }} et pour le temps que vous m'avez accordé.
+
+Si vous souhaitez aller plus loin, les accompagnements Conseil IA sont présentés ici :
+
+{{ shop_url }}
+
+Vous pouvez aussi simplement répondre à cet email pour en discuter.
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence

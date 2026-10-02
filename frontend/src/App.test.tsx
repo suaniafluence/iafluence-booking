@@ -123,6 +123,21 @@ describe("routing", () => {
     expect(screen.getByRole("banner")).toHaveTextContent("AI consulting sessions");
   });
 
+  it("/en/decouverte opens the free discovery call page", async () => {
+    vi.spyOn(api, "discoveryInfo").mockResolvedValue({ consultant_name: "Suan", timezone: "Europe/Paris", duration_min: 30 });
+    vi.spyOn(api, "discoveryAvailability").mockResolvedValue({ slots: [] });
+    renderAt("/en/decouverte");
+    expect(await screen.findByRole("heading", { name: "Let’s talk about your AI projects in 30 minutes" })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("/decouverte moves to the browser language", async () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["es-CL"]);
+    vi.spyOn(api, "discoveryInfo").mockReturnValue(new Promise(() => {}));
+    renderAt("/decouverte");
+    await waitFor(() => expect(url()).toBe("/es/decouverte"));
+  });
+
   it("falls back to French when the browser has no supported language", () => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue([]);
     vi.spyOn(navigator, "language", "get").mockReturnValue("de-DE");

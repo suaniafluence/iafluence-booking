@@ -70,6 +70,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ token, start, locale, timezone }),
     }),
+  discoveryInfo: () => request<DiscoveryInfo>("/api/discovery"),
+  discoveryAvailability: () => request<{ slots: Slot[] }>("/api/discovery/availability"),
+  /** `website` is the honeypot field: always empty for people. */
+  bookDiscovery: (call: DiscoveryRequest) =>
+    request<BookingInfo>("/api/discovery", { method: "POST", body: JSON.stringify(call) }),
   adminLogin: (password: string) =>
     request<{ status: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) }),
   adminLogout: () => request<{ status: string }>("/api/admin/logout", { method: "POST" }),
@@ -116,6 +121,13 @@ export const api = {
   adminFirefliesConnect: (apiKey: string) =>
     request<FirefliesStatus>("/api/admin/fireflies", { method: "POST", body: JSON.stringify({ api_key: apiKey }) }),
   adminFirefliesDisconnect: () => request<FirefliesStatus>("/api/admin/fireflies", { method: "DELETE" }),
+  /** « Autres réunions » : Fireflies recordings of the last 7 days (one Fireflies request). */
+  adminMeetings: () => request<{ meetings: Meeting[] }>("/api/admin/meetings"),
+  adminCreateMeetingReport: (meeting: MeetingReportRequest) =>
+    request<{ report_id: number; booking_id: number }>("/api/admin/meetings", {
+      method: "POST",
+      body: JSON.stringify(meeting),
+    }),
   /** « Imprimer mon calendrier » : PDF of every busy period from `start` to `end` (YYYY-MM-DD, both included). */
   adminCalendarPdf: async (start: string, end: string) =>
     (await send(`/api/admin/calendar.pdf?start=${enc(start)}&end=${enc(end)}`)).blob(),
@@ -151,8 +163,12 @@ export type SessionReport = {
   erased: boolean;
 };
 
+/** session: paid consulting session; discovery: free call booked on /decouverte; meeting: booked elsewhere. */
+export type BookingKind = "session" | "discovery" | "meeting";
+
 export type FinishedSession = {
   booking_id: number;
+  kind: BookingKind;
   customer: string;
   email: string;
   product: string;
@@ -208,7 +224,7 @@ export type AdminOverview = {
     hours_to_schedule: number;
     hours_to_deliver: number;
   };
-  upcoming: (BookingInfo & { booking_id: number; customer: string; email: string; product: string })[];
+  upcoming: (BookingInfo & { booking_id: number; kind: BookingKind; customer: string; email: string; product: string })[];
   clients: {
     purchase_id: number;
     customer_id: number;
@@ -226,4 +242,39 @@ export type AdminOverview = {
     booking: BookingInfo | null;
   }[];
   reports: { enabled: boolean; send_without_review: boolean; sessions: FinishedSession[] };
+};
+
+export type DiscoveryInfo = { consultant_name: string; timezone: string; duration_min: number };
+
+export type DiscoveryRequest = {
+  name: string;
+  email: string;
+  start: string;
+  message: string;
+  locale: string;
+  timezone: string;
+  website: string;
+};
+
+export type Meeting = {
+  transcript_id: string;
+  title: string | null;
+  start: string;
+  end: string;
+  /** Guests of the recording, the admin's own addresses left out. */
+  participants: string[];
+  suggested_email: string | null;
+  suggested_name: string | null;
+  /** Set once a report was asked for (or the recording was matched to a session). */
+  report_id: number | null;
+};
+
+export type MeetingReportRequest = {
+  transcript_id: string;
+  title: string | null;
+  start: string;
+  end: string;
+  name: string;
+  email: string;
+  locale: string;
 };

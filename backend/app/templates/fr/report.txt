@@ -1,0 +1,31 @@
+Bonjour {{ name }},
+
+{% if kind == "discovery" %}
+Merci pour notre appel découverte du {{ date_long }}. Voici le compte rendu de nos échanges.
+{% else %}
+Merci pour notre réunion du {{ date_long }}. Voici son compte rendu.
+{% endif %}
+{% for title, items in sections %}
+
+{{ title }}
+{% for item in items %}
+- {{ item }}
+{% endfor %}
+{% endfor %}
+{% if image_cid %}
+
+L'infographie de nos échanges est jointe à cet email.
+{% endif %}
+{% if kind == "discovery" %}
+
+Si vous souhaitez aller plus loin, les accompagnements Conseil IA sont présentés ici :
+
+{{ shop_url }}
+
+Vous pouvez aussi simplement répondre à cet email pour en discuter.
+{% endif %}
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence

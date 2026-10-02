@@ -1,4 +1,5 @@
-"""End of session: close finished sessions and email the link to book the next one.
+"""End of session: close finished sessions and email the link to book the next one (or, after a free discovery
+call, thanks and where to buy consulting hours).
 
 Runs in the API process every `follow_up_poll_seconds`. Moving a booking from 'confirmed' to 'completed'
 frees the purchase for its next booking (one upcoming session per purchase) and is the idempotency marker:
@@ -34,6 +35,7 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
     """
     to_notify: list[tuple[int, str]] = []
     to_thank: list[int] = []
+    to_thank_prospect: list[int] = []
     reports = 0
     with SessionLocal() as db:
         with_reports = session_reports.enabled(db)
@@ -46,10 +48,18 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
         for booking in finished:
             booking.status = "completed"
             purchase = booking.purchase
-            if purchase.payment_status != "paid":
+            if purchase is not None and purchase.payment_status != "paid":
                 continue
             if now - booking.end_datetime > EMAIL_GRACE:
                 log.warning("booking %s ended at %s: closed without follow-up email", booking.id, booking.end_datetime)
+                continue
+            if booking.kind == "discovery":
+                # Free call: a report when they are on, otherwise thanks and where to buy consulting hours.
+                if with_reports:
+                    session_reports.create_for(db, booking, now)
+                    reports += 1
+                else:
+                    to_thank_prospect.append(booking.id)
                 continue
             last = purchase.hours_remaining < 1
             token = None if last else notifications.active_token(db, purchase.id)
@@ -68,7 +78,9 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
         notifications.send_next_session_link(mailer, purchase_id, token)
     for purchase_id in to_thank:
         notifications.send_last_session_thanks(mailer, purchase_id)
-    return len(to_notify) + len(to_thank) + reports
+    for booking_id in to_thank_prospect:
+        notifications.send_discovery_thanks(mailer, booking_id)
+    return len(to_notify) + len(to_thank) + len(to_thank_prospect) + reports
 
 
 async def run_forever(mailer_factory: Callable[[], Mailer], interval_s: float) -> None:

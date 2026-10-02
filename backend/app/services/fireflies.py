@@ -25,7 +25,9 @@ LIST_QUERY = """
 query Transcripts($fromDate: DateTime, $toDate: DateTime, $limit: Int) {
   transcripts(fromDate: $fromDate, toDate: $toDate, limit: $limit) {
     id
+    title
     date
+    duration
     meeting_link
     participants
     meeting_attendees { email }
@@ -60,6 +62,9 @@ class TranscriptMeta:
     start: datetime
     emails: frozenset[str] = field(default_factory=frozenset)
     meeting_link: str | None = None
+    # Shown when the admin picks a meeting booked elsewhere (app.services.meetings).
+    title: str | None = None
+    duration_min: float | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +98,9 @@ def parse_meta(raw: dict) -> TranscriptMeta:
         start=datetime.fromtimestamp(float(raw["date"]) / 1000, UTC),
         emails=frozenset(e.strip().lower() for e in emails),
         meeting_link=raw.get("meeting_link") or None,
+        title=(raw.get("title") or "").strip() or None,
+        # Minutes, as a float.
+        duration_min=float(raw["duration"]) if raw.get("duration") else None,
     )
 
 

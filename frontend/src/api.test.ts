@@ -112,6 +112,41 @@ describe("api", () => {
     });
   });
 
+  it("discovery call and meeting report endpoints", async () => {
+    const fetch = mockFetch(200, {});
+    await api.discoveryInfo();
+    expect(fetch).toHaveBeenLastCalledWith("/api/discovery", expect.anything());
+    await api.discoveryAvailability();
+    expect(fetch).toHaveBeenLastCalledWith("/api/discovery/availability", expect.anything());
+    const call = {
+      name: "Paul",
+      email: "paul@example.com",
+      start: "2026-10-08T14:00:00+02:00",
+      message: "",
+      locale: "fr",
+      timezone: "Europe/Paris",
+      website: "",
+    };
+    await api.bookDiscovery(call);
+    expect(fetch).toHaveBeenLastCalledWith("/api/discovery", expect.objectContaining({ method: "POST", body: JSON.stringify(call) }));
+    await api.adminMeetings();
+    expect(fetch).toHaveBeenLastCalledWith("/api/admin/meetings", expect.anything());
+    const meeting = {
+      transcript_id: "ff",
+      title: null,
+      start: "2026-10-05T10:30:00+02:00",
+      end: "2026-10-05T11:00:00+02:00",
+      name: "Claire",
+      email: "claire@exemple.fr",
+      locale: "en",
+    };
+    await api.adminCreateMeetingReport(meeting);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/meetings",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(meeting) }),
+    );
+  });
+
   it("downloads the printable calendar as a PDF", async () => {
     const pdf = new Blob(["%PDF-"], { type: "application/pdf" });
     const fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, blob: () => Promise.resolve(pdf) });

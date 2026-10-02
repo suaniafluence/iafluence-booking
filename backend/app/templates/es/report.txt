@@ -1,0 +1,31 @@
+Hola, {{ name }}:
+
+{% if kind == "discovery" %}
+Gracias por nuestra llamada de descubrimiento del {{ date_long }}. Aquí tiene el resumen de lo que hablamos.
+{% else %}
+Gracias por nuestra reunión del {{ date_long }}. Aquí tiene el resumen.
+{% endif %}
+{% for title, items in sections %}
+
+{{ title }}
+{% for item in items %}
+- {{ item }}
+{% endfor %}
+{% endfor %}
+{% if image_cid %}
+
+Adjuntamos a este correo la infografía de nuestra conversación.
+{% endif %}
+{% if kind == "discovery" %}
+
+Si desea ir más allá, puede consultar nuestros acompañamientos de asesoría en IA aquí:
+
+{{ shop_url }}
+
+También puede responder a este correo para hablarlo.
+{% endif %}
+
+Un saludo,
+
+{{ consultant_name }}
+IAfluence

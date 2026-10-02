@@ -52,6 +52,7 @@ export const overview = (over: Partial<AdminOverview> = {}): AdminOverview => ({
   upcoming: [
     {
       booking_id: 21,
+      kind: "session",
       customer: "Jean Dupont",
       email: "jean@example.com",
       product: "Conseil IA - 5h",
@@ -61,6 +62,7 @@ export const overview = (over: Partial<AdminOverview> = {}): AdminOverview => ({
     },
     {
       booking_id: 22,
+      kind: "session",
       customer: "Marie Martin",
       email: "marie@example.com",
       product: "Conseil IA - 2h",
@@ -138,6 +140,7 @@ export const finishedSession = (
   over: Partial<FinishedSession> = {},
 ): FinishedSession => ({
   booking_id: 31,
+  kind: "session",
   customer: "Marie Martin",
   email: "marie@example.com",
   product: "Conseil IA - 3h",

@@ -10,6 +10,7 @@ import {
 } from "../../api";
 import { Alert } from "../../components/Layout";
 import { hm, longDate } from "../../format";
+import { OtherMeetings } from "./OtherMeetings";
 
 const SECTIONS: [keyof Synthese, string][] = [
   ["objectifs", "Objectifs"],
@@ -99,7 +100,7 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
       <h2 className="text-lg font-semibold text-slate-900">Comptes rendus de séance</h2>
       <p className="mt-1 text-sm text-slate-500">
         {reports.enabled
-          ? "À la fin de chaque séance, la transcription Fireflies est résumée par votre agent Codex, puis l’email au client est préparé en brouillon dans Gmail avec la synthèse et l’infographie."
+          ? "À la fin de chaque séance ou appel découverte, la transcription Fireflies est résumée par votre agent Codex, puis l’email au client est préparé en brouillon dans Gmail avec la synthèse et l’infographie."
           : "Désactivé : sans clé Fireflies ni Codex, l’email de fin de séance est préparé sans compte rendu."}
       </p>
       <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
@@ -116,6 +117,15 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
           </span>
         </span>
       </label>
+      {reports.enabled && (
+        <OtherMeetings
+          onCreated={(message) => {
+            setError(null);
+            setDone(message);
+            onChange();
+          }}
+        />
+      )}
       {done && (
         <div className="mt-3">
           <Alert tone="info">{done}</Alert>
@@ -127,7 +137,7 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
         </div>
       )}
       {reports.sessions.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500">Aucune séance terminée pour le moment.</p>
+        <p className="mt-3 text-sm text-slate-500">Aucun rendez-vous terminé pour le moment.</p>
       ) : (
         <ul aria-label="Séances terminées" className="mt-3 divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">
           {reports.sessions.map((s) => {
@@ -140,7 +150,14 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
               <li key={s.booking_id} className="px-5 py-4 text-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="font-medium text-slate-900">{s.customer}</div>
+                    <div className="font-medium text-slate-900">
+                      {s.customer}
+                      {s.kind !== "session" && (
+                        <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                          {s.kind === "discovery" ? "Appel découverte" : "Réunion"}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-slate-500">
                       {longDate(s.start)} · {hm(s.start)} · {s.product}
                     </div>
@@ -183,20 +200,22 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                         >
                           {r.transcript_found ? "Relancer le résumé" : "Relancer Fireflies"}
                         </button>
-                        <button
-                          type="button"
-                          disabled={busy === r.id}
-                          className="font-medium text-slate-700 underline disabled:text-slate-400"
-                          onClick={() =>
-                            act(
-                              s,
-                              () => api.adminDraftWithoutSummary(r.id),
-                              `Brouillon sans résumé créé pour ${s.customer}.`,
-                            )
-                          }
-                        >
-                          Créer le brouillon sans résumé
-                        </button>
+                        {s.kind !== "meeting" && (
+                          <button
+                            type="button"
+                            disabled={busy === r.id}
+                            className="font-medium text-slate-700 underline disabled:text-slate-400"
+                            onClick={() =>
+                              act(
+                                s,
+                                () => api.adminDraftWithoutSummary(r.id),
+                                `Brouillon sans résumé créé pour ${s.customer}.`,
+                              )
+                            }
+                          >
+                            Créer le brouillon sans résumé
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
