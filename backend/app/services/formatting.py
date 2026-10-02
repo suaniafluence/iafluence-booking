@@ -55,3 +55,10 @@ def hours(n: int, locale: str = "fr") -> str:
 def tz_city(tz: str) -> str:
     """'America/Argentina/Buenos_Aires' -> 'Buenos Aires'"""
     return tz.rsplit("/", 1)[-1].replace("_", " ")
+
+
+def inline_date(dt: datetime, tz: str, locale: str = "fr") -> str:
+    """long_date in the middle of a sentence: 'du jeudi 8 octobre 2026', 'del jueves, 8 de octubre…', but
+    'on Thursday 8 October 2026'."""
+    date = long_date(dt, tz, locale)
+    return date if locale == "en" else date.lower()

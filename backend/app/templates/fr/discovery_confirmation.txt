@@ -1,0 +1,28 @@
+Bonjour {{ name }},
+
+Votre appel découverte gratuit de {{ minutes }} minutes avec IAfluence est confirmé.
+
+Date :
+{{ date_long }}
+
+Horaire :
+{{ hour_range }}{{ " (heure de " ~ local_city ~ ")" if paris else "" }}
+
+{% if paris %}
+Heure de Paris :
+{{ paris.date_long }}, {{ paris.hour_range }}
+
+{% endif %}
+{% if meet_url %}
+Lien visio :
+{{ meet_url }}
+
+{% endif %}
+Nous ferons le point sur votre activité, vos besoins et ce que l'intelligence artificielle peut vous apporter. Un empêchement ? Répondez simplement à cet email pour changer d'horaire.
+
+Une invitation calendrier vous a également été envoyée.
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence

@@ -95,7 +95,8 @@ class DemoMailer:
 
 
 class DemoFireflies:
-    """Every session booked in the demo was « recorded »: its transcript is a short canned conversation."""
+    """Every session booked in the demo was « recorded »: its transcript is a short canned conversation.
+    One more meeting, booked outside the app, was recorded at 10:30 (« Autres réunions » in the admin)."""
 
     def list_transcripts(self, time_min, time_max):
         from app.db import SessionLocal
@@ -103,17 +104,36 @@ class DemoFireflies:
 
         with SessionLocal() as db:
             bookings = db.scalars(
-                select(Booking).where(Booking.start_datetime >= time_min, Booking.start_datetime <= time_max)
+                select(Booking).where(
+                    Booking.kind != "meeting", Booking.start_datetime >= time_min, Booking.start_datetime <= time_max
+                )
             ).all()
-            return [
+            metas = [
                 TranscriptMeta(
                     id=f"demo_{b.id}",
                     start=b.start_datetime,
                     emails=frozenset({b.customer.email.lower(), "contact@iafluence.fr"}),
                     meeting_link=b.meet_url,
+                    title=f"{'Appel découverte' if b.kind == 'discovery' else 'Conseil IA'} - {b.customer.name}",
+                    duration_min=(b.end_datetime - b.start_datetime).total_seconds() / 60,
                 )
                 for b in bookings
             ]
+        now = datetime.now(PARIS)
+        external = now.replace(hour=10, minute=30, second=0, microsecond=0)
+        if external > now:
+            external -= timedelta(days=1)
+        if time_min <= external <= time_max:
+            metas.append(
+                TranscriptMeta(
+                    id="demo_external",
+                    start=external,
+                    emails=frozenset({"claire@exemple.fr", "contact@iafluence.fr"}),
+                    title="Point projet - Exemple SAS",
+                    duration_min=45,
+                )
+            )
+        return metas
 
     def account(self, api_key):
         return FirefliesAccount(email="demo@iafluence.fr", name="Démo IAfluence")
@@ -172,8 +192,9 @@ class DemoCodex:
         if not self.connected:
             raise CodexNotConnected("Codex n'est pas connecté")
         ctx = json.loads(prompt.split("Contexte de la séance (JSON) :\n", 1)[1].split("\n\nTranscription", 1)[0])
-        number, client = ctx["seance_numero"], ctx["client"]
-        last = ctx["derniere_seance"]
+        number, client = ctx.get("seance_numero"), ctx["client"]
+        last = ctx.get("derniere_seance", False)
+        heading = {"appel_decouverte": "Appel découverte", "reunion": "Réunion"}.get(ctx.get("type_rdv"))
         synthese = {
             "objectifs": ["Identifier les usages de l'IA générative les plus utiles à votre activité"],
             "points_abordes": [
@@ -188,10 +209,11 @@ class DemoCodex:
                 else ["Construire et tester l'assistant lors de la prochaine séance"]
             ),
         }
-        return json.dumps({"synthese": synthese, "image": demo_infographic(number, client, synthese)}, ensure_ascii=False)
+        image = demo_infographic(number, client, synthese, heading)
+        return json.dumps({"synthese": synthese, "image": image}, ensure_ascii=False)
 
 
-def demo_infographic(number: int, client: str, synthese: dict) -> str:
+def demo_infographic(number: int | None, client: str, synthese: dict, heading: str | None = None) -> str:
     from textwrap import wrap
     from xml.sax.saxutils import escape
 
@@ -206,7 +228,7 @@ def demo_infographic(number: int, client: str, synthese: dict) -> str:
         '<rect width="1200" height="800" fill="#eef2ff"/>',
         '<rect x="0" y="0" width="1200" height="120" fill="#1e1b4b"/>',
         f'<text x="60" y="78" font-family="DejaVu Sans, sans-serif" font-size="40" fill="#ffffff">'
-        f"Séance n° {number} — {escape(client)}</text>",
+        f"{escape(heading or f'Séance n° {number}')} — {escape(client)}</text>",
     ]
     for i, (title, items) in enumerate(blocks):
         x, y = 60 + (i % 2) * 560, 170 + (i // 2) * 300

@@ -109,6 +109,33 @@ describe("SessionReports", () => {
     expect(items[3]).toHaveTextContent("Fireflies interrogé 2 fois · abandon à 21:00");
   });
 
+  it("tags discovery calls and meetings; a meeting has no email without summary", () => {
+    render(
+      <SessionReports
+        reports={reports({
+          sessions: [
+            finishedSession(sessionReport({ id: 1, status: "failed" }), { booking_id: 1, kind: "discovery", customer: "Paul" }),
+            finishedSession(sessionReport({ id: 2, status: "failed" }), { booking_id: 2, kind: "meeting", customer: "Claire" }),
+          ],
+        })}
+        onChange={() => {}}
+      />,
+    );
+    const [paul, claire] = within(screen.getByRole("list", { name: "Séances terminées" })).getAllByRole("listitem");
+    expect(paul).toHaveTextContent("PaulAppel découverte");
+    expect(within(paul).getByRole("button", { name: "Créer le brouillon sans résumé" })).toBeInTheDocument();
+    expect(claire).toHaveTextContent("ClaireRéunion");
+    expect(within(claire).queryByRole("button", { name: "Créer le brouillon sans résumé" })).not.toBeInTheDocument();
+    expect(within(claire).getByRole("button", { name: "Relancer le résumé" })).toBeInTheDocument();
+  });
+
+  it("offers « Autres réunions » only when reports are on", () => {
+    const { rerender } = render(<SessionReports reports={reports()} onChange={() => {}} />);
+    expect(screen.getByRole("heading", { name: "Autres réunions" })).toBeInTheDocument();
+    rerender(<SessionReports reports={reports({ enabled: false })} onChange={() => {}} />);
+    expect(screen.queryByRole("heading", { name: "Autres réunions" })).not.toBeInTheDocument();
+  });
+
   it("previews the summary and the infographic", async () => {
     const user = userEvent.setup();
     render(<SessionReports reports={reports()} onChange={() => {}} />);
@@ -121,7 +148,8 @@ describe("SessionReports", () => {
       "src",
       "/api/admin/reports/7/image.png",
     );
-    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    const list = screen.getByRole("list", { name: "Séances terminées" });
+    const headings = within(list).getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
     expect(headings).toEqual(["Objectifs", "Points abordés", "Vos actions", "Prochaines étapes"]); // no empty section
     expect(screen.getByText("Choix de l'outil")).toBeInTheDocument();
     await user.click(toggle);
@@ -251,7 +279,7 @@ describe("SessionReports", () => {
     render(<SessionReports reports={reports({ enabled: false, send_without_review: true, sessions: [] })} onChange={() => {}} />);
     expect(screen.getByRole("checkbox", { name: /sans relecture/ })).toBeChecked();
     expect(screen.getByText(/Désactivé : sans clé Fireflies ni Codex/)).toBeInTheDocument();
-    expect(screen.getByText("Aucune séance terminée pour le moment.")).toBeInTheDocument();
+    expect(screen.getByText("Aucun rendez-vous terminé pour le moment.")).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });
 });

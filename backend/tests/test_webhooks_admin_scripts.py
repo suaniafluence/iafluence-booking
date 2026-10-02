@@ -273,7 +273,7 @@ def test_admin_overview_kpis_and_lists(client, fakes, token_for):
         "hours_to_deliver": 6.5,
     }
     assert data["upcoming"] == [
-        {"booking_id": 1, "customer": "Jean Dupont", "email": "jean@example.com", "product": "Conseil IA - 5h",
+        {"booking_id": 1, "kind": "session", "customer": "Jean Dupont", "email": "jean@example.com", "product": "Conseil IA - 5h",
          "start": "2026-10-08T14:00:00+02:00", "end": "2026-10-08T15:00:00+02:00", "meet_url": "https://meet.google.com/abc-defg-hij"}
     ]
     clients = {c["name"]: c for c in data["clients"]}

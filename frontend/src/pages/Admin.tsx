@@ -411,10 +411,13 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
     setBusy(true);
     setError(null);
     try {
-      await api.adminCancelBooking(b.booking_id, notify);
+      const discovery = b.kind === "discovery";
+      await api.adminCancelBooking(b.booking_id, notify && !discovery);
       setCancelling(null);
       setDone(
-        `Séance de ${b.customer} annulée : l’heure lui a été recréditée${notify ? " et son lien lui a été renvoyé" : ""}.`,
+        discovery
+          ? `Appel découverte de ${b.customer} annulé : Google Agenda a envoyé l’annulation.`
+          : `Séance de ${b.customer} annulée : l’heure lui a été recréditée${notify ? " et son lien lui a été renvoyé" : ""}.`,
       );
       onChange();
     } catch (err) {
@@ -440,7 +443,14 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
             <li key={b.booking_id} className="px-5 py-4 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <div className="font-medium text-slate-900">{b.customer}</div>
+                  <div className="font-medium text-slate-900">
+                    {b.customer}
+                    {b.kind === "discovery" && (
+                      <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
+                        Appel découverte
+                      </span>
+                    )}
+                  </div>
                   <div className="text-slate-500">{b.email}</div>
                 </div>
                 <div className="text-right">
@@ -460,7 +470,7 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
                         {" · "}
                         <button
                           type="button"
-                          aria-label={`Annuler la séance de ${b.customer}`}
+                          aria-label={`Annuler ${b.kind === "discovery" ? "l’appel découverte" : "la séance"} de ${b.customer}`}
                           className="text-red-700 underline"
                           onClick={() => open(b)}
                         >
@@ -473,18 +483,26 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
               </div>
               {cancelling === b.booking_id && (
                 <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-4">
-                  <p className="text-slate-700">
-                    Annuler cette séance ? L’événement Google Agenda est supprimé et l’heure est recréditée au client.
-                  </p>
-                  <label className="flex items-center gap-2 text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={notify}
-                      onChange={(e) => setNotify(e.target.checked)}
-                      className="h-4 w-4 accent-brand-600"
-                    />
-                    Envoyer au client son lien pour choisir un autre créneau
-                  </label>
+                  {b.kind === "discovery" ? (
+                    <p className="text-slate-700">
+                      Annuler cet appel découverte ? L’événement Google Agenda est supprimé et Google prévient le prospect.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-slate-700">
+                        Annuler cette séance ? L’événement Google Agenda est supprimé et l’heure est recréditée au client.
+                      </p>
+                      <label className="flex items-center gap-2 text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={notify}
+                          onChange={(e) => setNotify(e.target.checked)}
+                          className="h-4 w-4 accent-brand-600"
+                        />
+                        Envoyer au client son lien pour choisir un autre créneau
+                      </label>
+                    </>
+                  )}
                   {error && <Alert>{error}</Alert>}
                   <div className="flex flex-col-reverse gap-3 sm:flex-row">
                     <Button variant="secondary" onClick={() => setCancelling(null)} disabled={busy}>

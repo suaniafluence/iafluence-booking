@@ -78,10 +78,17 @@ class BookingToken(Base):
 
 
 class Booking(Base):
+    """A paid consulting session (`session`), a free discovery call booked on /decouverte (`discovery`), or a
+    meeting booked elsewhere whose Fireflies recording the admin chose to summarize (`meeting`).
+
+    Only sessions belong to a purchase. The others carry the customer's language and time zone themselves.
+    """
+
     __tablename__ = "bookings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    purchase_id: Mapped[int] = mapped_column(ForeignKey("purchases.id"))
+    kind: Mapped[str] = mapped_column(String(16), server_default="session", default="session")
+    purchase_id: Mapped[int | None] = mapped_column(ForeignKey("purchases.id"))
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
     start_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     end_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -89,13 +96,34 @@ class Booking(Base):
     meet_url: Mapped[str | None] = mapped_column(String(512))
     # confirmed (upcoming) -> completed once it has ended (app.services.follow_up) | cancelled
     status: Mapped[str] = mapped_column(String(32))
+    # Meeting: its Fireflies title. Discovery and meeting: the customer's language and browser time zone.
+    title: Mapped[str | None] = mapped_column(String(255))
+    locale: Mapped[str | None] = mapped_column(String(5))
+    customer_timezone: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    purchase: Mapped[Purchase] = relationship(back_populates="bookings")
+    purchase: Mapped[Purchase | None] = relationship(back_populates="bookings")
     customer: Mapped[Customer] = relationship()
+
+    @property
+    def client_locale(self) -> str:
+        return self.purchase.locale if self.purchase else (self.locale or "fr")
+
+    @property
+    def client_timezone(self) -> str | None:
+        return self.purchase.customer_timezone if self.purchase else self.customer_timezone
 
     __table_args__ = (
         CheckConstraint("start_datetime < end_datetime", name="booking_interval_order"),
+        CheckConstraint("kind IN ('session', 'discovery', 'meeting')", name="booking_kind"),
+        CheckConstraint("(kind = 'session') = (purchase_id IS NOT NULL)", name="booking_purchase_iff_session"),
+        # One upcoming discovery call per person (email).
+        Index(
+            "uq_bookings_one_discovery_per_customer",
+            "customer_id",
+            unique=True,
+            postgresql_where=text("kind = 'discovery' AND status = 'confirmed'"),
+        ),
         # R03 — one upcoming session per purchase: finished ones move to 'completed', freeing the next.
         Index(
             "uq_bookings_one_confirmed_per_purchase",
@@ -154,6 +182,13 @@ class SessionReport(Base):
             "status IN ('waiting_transcript', 'summarizing', 'ready', 'drafted', 'failed')", name="report_status"
         ),
         Index("ix_session_reports_status_next_attempt", "status", "next_attempt_at"),
+        # A recording is summarized once, whether matched to a session or picked by the admin.
+        Index(
+            "uq_session_reports_transcript",
+            "fireflies_transcript_id",
+            unique=True,
+            postgresql_where=text("fireflies_transcript_id IS NOT NULL"),
+        ),
     )
 
 
@@ -219,6 +254,9 @@ class Settings(Base):
     fireflies_email: Mapped[str | None] = mapped_column(String(320))
     fireflies_name: Mapped[str | None] = mapped_column(String(255))
     fireflies_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Free discovery call (/decouverte): same weekly hours, notice and buffers as the sessions.
+    discovery_enabled: Mapped[bool] = mapped_column(Boolean, server_default="true", default=True)
+    discovery_duration_min: Mapped[int] = mapped_column(Integer, server_default="30", default=30)
 
 
 class AvailabilityRule(Base):

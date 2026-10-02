@@ -1,0 +1,14 @@
+Hola, {{ name }}:
+
+Gracias por nuestra llamada de descubrimiento del {{ date_long }} y por su tiempo.
+
+Si desea ir más allá, puede consultar nuestros acompañamientos de asesoría en IA aquí:
+
+{{ shop_url }}
+
+También puede responder a este correo para hablarlo.
+
+Un saludo,
+
+{{ consultant_name }}
+IAfluence

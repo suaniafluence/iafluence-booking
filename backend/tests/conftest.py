@@ -125,10 +125,12 @@ class FakeFireflies:
         self.fail_sentences: Exception | None = None
         self.checked_keys: list[str] = []
 
-    def add(self, transcript_id, start, emails=(), meeting_link=None, sentences=None):
+    def add(self, transcript_id, start, emails=(), meeting_link=None, sentences=None, title=None, duration_min=None):
         from app.services.fireflies import Sentence, TranscriptMeta
 
-        self.recordings.append(TranscriptMeta(transcript_id, start, frozenset(emails), meeting_link))
+        self.recordings.append(
+            TranscriptMeta(transcript_id, start, frozenset(emails), meeting_link, title, duration_min)
+        )
         self.transcripts[transcript_id] = [
             Sentence(*s)
             for s in (sentences if sentences is not None else [("Suan", "Bonjour"), ("Client", "Voici mon projet")])

@@ -19,6 +19,7 @@ from app.schemas import (
     CustomerPatchIn,
     LoginIn,
     ManualClientIn,
+    MeetingReportIn,
     ManualClientOut,
     PurchaseHoursIn,
     ReportSettingsIn,
@@ -29,6 +30,7 @@ from app.services import (
     codex_login,
     fireflies_account,
     manual_purchase,
+    meetings,
     notifications,
     session_reports,
 )
@@ -153,7 +155,8 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
                 "booking_id": b.id,
                 "customer": b.customer.name,
                 "email": b.customer.email,
-                "product": b.purchase.product_name,
+                "kind": b.kind,
+                "product": session_reports.product_label(b),
                 **booking_dict(b),
             }
             for b in upcoming
@@ -233,7 +236,8 @@ def cancel_booking(
     booking = booking_service.cancel(db, calendar, booking_id, now)
     if body.notify:
         background.add_task(notifications.send_booking_cancelled, mailer, booking.id)
-    return {"status": "cancelled", **booking_service.hours_summary(booking.purchase)}
+    hours = booking_service.hours_summary(booking.purchase) if booking.purchase else {}
+    return {"status": "cancelled", **hours}
 
 
 @router.patch("/purchases/{purchase_id}", dependencies=[Depends(require_admin)])

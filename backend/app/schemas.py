@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, EmailStr, Field, StringConstraints
 
@@ -104,3 +104,37 @@ class ReportSettingsIn(BaseModel):
 
 class FirefliesConnectIn(BaseModel):
     api_key: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=512)]
+
+
+class DiscoveryInfoOut(BaseModel):
+    consultant_name: str
+    timezone: str
+    duration_min: int
+
+
+class DiscoveryIn(BaseModel):
+    name: Label
+    email: EmailStr
+    start: AwareDatetime
+    # What the visitor would like to talk about (optional), shown in the Google event and the admin email.
+    message: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] = ""
+    locale: str | None = Field(None, max_length=16)
+    timezone: str | None = Field(None, max_length=64)
+    # Honeypot: hidden from people, filled in by bots.
+    website: str = Field("", max_length=255)
+
+
+class DiscoveryOut(BaseModel):
+    start: datetime
+    end: datetime
+    meet_url: str | None
+
+
+class MeetingReportIn(BaseModel):
+    transcript_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    title: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None
+    start: AwareDatetime
+    end: AwareDatetime
+    name: Label
+    email: EmailStr
+    locale: Literal["fr", "en", "es"] = "fr"

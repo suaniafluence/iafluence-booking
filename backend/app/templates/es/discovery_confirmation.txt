@@ -1,0 +1,28 @@
+Hola, {{ name }}:
+
+Su llamada de descubrimiento gratuita de {{ minutes }} minutos con IAfluence está confirmada.
+
+Fecha:
+{{ date_long }}
+
+Hora:
+{{ hour_range }}{{ " (hora de " ~ local_city ~ ")" if paris else "" }}
+
+{% if paris %}
+Hora de París:
+{{ paris.date_long }}, {{ paris.hour_range }}
+
+{% endif %}
+{% if meet_url %}
+Enlace de la videollamada:
+{{ meet_url }}
+
+{% endif %}
+Hablaremos de su actividad, de sus necesidades y de lo que la inteligencia artificial puede aportarle. ¿Le ha surgido un imprevisto? Basta con responder a este correo para cambiar la hora.
+
+También le hemos enviado una invitación de calendario.
+
+Un saludo,
+
+{{ consultant_name }}
+IAfluence
