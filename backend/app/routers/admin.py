@@ -19,6 +19,7 @@ from app.schemas import (
     CustomerPatchIn,
     LoginIn,
     ManualClientIn,
+    MeetingReportIn,
     ManualClientOut,
     PurchaseHoursIn,
     ReportSettingsIn,
@@ -29,6 +30,7 @@ from app.services import (
     codex_login,
     fireflies_account,
     manual_purchase,
+    meetings,
     notifications,
     session_reports,
 )
@@ -153,7 +155,8 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
                 "booking_id": b.id,
                 "customer": b.customer.name,
                 "email": b.customer.email,
-                "product": b.purchase.product_name,
+                "kind": b.kind,
+                "product": session_reports.product_label(b),
                 **booking_dict(b),
             }
             for b in upcoming
@@ -233,7 +236,8 @@ def cancel_booking(
     booking = booking_service.cancel(db, calendar, booking_id, now)
     if body.notify:
         background.add_task(notifications.send_booking_cancelled, mailer, booking.id)
-    return {"status": "cancelled", **booking_service.hours_summary(booking.purchase)}
+    hours = booking_service.hours_summary(booking.purchase) if booking.purchase else {}
+    return {"status": "cancelled", **hours}
 
 
 @router.patch("/purchases/{purchase_id}", dependencies=[Depends(require_admin)])
@@ -317,6 +321,39 @@ def draft_without_summary(
     email = _report_action(lambda: session_reports.draft_without_summary(db, report_id, now))
     background.add_task(session_reports.deliver, mailer, email)
     return {"id": report_id, "status": "drafted"}
+
+
+@router.get("/meetings", dependencies=[Depends(require_admin)])
+def list_meetings(db: Session = Depends(get_db), fireflies=Depends(get_fireflies), now: datetime = Depends(get_now)):
+    """« Autres réunions » : Fireflies recordings of the last 7 days, to summarize a meeting booked elsewhere."""
+    if not session_reports.enabled(db):
+        raise HTTPException(409, "Connectez d'abord Fireflies et Codex.")
+    try:
+        return {"meetings": meetings.recent(db, fireflies, now, ZoneInfo(get_settings(db).timezone))}
+    except FirefliesError as e:
+        raise HTTPException(502, f"Fireflies ne répond pas : {e}.")
+
+
+@router.post("/meetings", status_code=201, dependencies=[Depends(require_admin)])
+def create_meeting_report(body: MeetingReportIn, db: Session = Depends(get_db), now: datetime = Depends(get_now)):
+    """Summarize that recording for that person: the report is written within minutes, then left as a Gmail draft."""
+    if not session_reports.enabled(db):
+        raise HTTPException(409, "Connectez d'abord Fireflies et Codex.")
+    try:
+        report = meetings.create_report(
+            db,
+            transcript_id=body.transcript_id,
+            title=body.title or None,
+            start=body.start,
+            end=body.end,
+            name=body.name,
+            email=str(body.email).lower(),
+            locale=body.locale,
+            now=now,
+        )
+    except meetings.MeetingError as e:
+        raise HTTPException(e.status_code, e.message)
+    return {"report_id": report.id, "booking_id": report.booking_id}
 
 
 @router.patch("/report-settings", dependencies=[Depends(require_admin)])

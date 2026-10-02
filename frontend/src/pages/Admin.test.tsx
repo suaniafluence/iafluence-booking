@@ -309,6 +309,23 @@ describe("Admin", () => {
     expect(api.adminOverview).toHaveBeenCalledTimes(2);
   });
 
+  it("cancels a discovery call: no hour to give back, no link to send", async () => {
+    const data = overview();
+    data.upcoming[0] = { ...data.upcoming[0], kind: "discovery", customer: "Paul Prospect", product: "Appel découverte" };
+    vi.mocked(api.adminOverview).mockResolvedValue(data);
+    vi.spyOn(api, "adminCancelBooking").mockResolvedValue({ status: "cancelled" });
+    const user = userEvent.setup();
+    render(<Admin />);
+    await user.click(await screen.findByRole("button", { name: "Annuler l’appel découverte de Paul Prospect" }));
+    expect(screen.getByText(/Google prévient le prospect/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Envoyer au client son lien pour choisir un autre créneau")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirmer l’annulation" }));
+    expect(api.adminCancelBooking).toHaveBeenCalledWith(21, false);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Appel découverte de Paul Prospect annulé : Google Agenda a envoyé l’annulation.",
+    );
+  });
+
   it("cancels without emailing the client when unticked", async () => {
     vi.spyOn(api, "adminCancelBooking").mockResolvedValue({ status: "cancelled" });
     const user = userEvent.setup();

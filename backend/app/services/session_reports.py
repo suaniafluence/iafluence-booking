@@ -118,6 +118,8 @@ def summary_sections(summary: dict, locale: str = "fr") -> list[tuple[str, list[
 
 def compose(db: Session, report: SessionReport, now: datetime, *, with_summary: bool, force_draft: bool = False):
     """The client email of a report, or the reason there is none. Marks the report drafted (or failed)."""
+    if report.booking.kind != "session":
+        return _compose_other(db, report, now, with_summary=with_summary, force_draft=force_draft)
     booking = report.booking
     purchase, customer = booking.purchase, booking.customer
     settings = get_settings(db)
@@ -148,10 +150,8 @@ def compose(db: Session, report: SessionReport, now: datetime, *, with_summary: 
     with_summary = with_summary and report.summary is not None
     html, images = None, {}
     if with_summary:
-        date_long = fmt.long_date(booking.start_datetime, settings.timezone, locale)
         ctx |= {
-            # Mid-sentence: "du jeudi 8 octobre", "del jueves, 8 de octubre", but "on Thursday 8 October".
-            "date_long": date_long if locale == "en" else date_long.lower(),
+            "date_long": fmt.inline_date(booking.start_datetime, settings.timezone, locale),
             "sections": summary_sections(report.summary, locale),
             "image_cid": IMAGE_CID if report.image_png else None,
         }
@@ -165,12 +165,60 @@ def compose(db: Session, report: SessionReport, now: datetime, *, with_summary: 
 
     # A generated summary is reviewed before it reaches the client, unless the admin opted out.
     auto = customer.auto_send_next_link and (not with_summary or settings.send_reports_without_review)
-    as_draft = force_draft or not auto
+    email = Email(customer.email, subject, body, force_draft or not auto, html, images, report.id)
+    return _drafted(report, now, email, with_summary)
+
+
+def _compose_other(db: Session, report: SessionReport, now: datetime, *, with_summary: bool, force_draft: bool):
+    """Discovery call: the report, or thanks and where to buy consulting hours. Meeting booked elsewhere: the report
+    only, always as a draft (the admin asked for it by hand)."""
+    booking, customer, settings = report.booking, report.booking.customer, get_settings(db)
+    locale, kind = booking.client_locale, booking.kind
+    date_long = fmt.inline_date(booking.start_datetime, settings.timezone, locale)
+    with_summary = with_summary and report.summary is not None
+    if not with_summary and kind == "meeting":
+        report.status, report.claimed_until = "failed", None
+        report.error = "Pas de compte rendu : aucun email préparé pour cette réunion."
+        return None
+    ctx = {
+        "name": customer.name,
+        "kind": kind,
+        "date_long": date_long,
+        "shop_url": get_config().shop_url,
+        "consultant_name": settings.consultant_name,
+    }
+    html, images = None, {}
+    if with_summary:
+        ctx |= {
+            "sections": summary_sections(report.summary, locale),
+            "image_cid": IMAGE_CID if report.image_png else None,
+        }
+        body = render(f"{locale}/report.txt", **ctx)
+        html = render(f"{locale}/report.html", **ctx)
+        images = {IMAGE_CID: report.image_png} if report.image_png else {}
+        subject = (
+            text(locale, "subject_discovery_report")
+            if kind == "discovery"
+            else text(locale, "subject_meeting_report", date=fmt.short_date(booking.start_datetime, settings.timezone))
+        )
+    else:
+        body = render(f"{locale}/discovery_thanks.txt", **ctx)
+        subject = text(locale, "subject_discovery_thanks")
+    auto = (
+        kind == "discovery"
+        and customer.auto_send_next_link
+        and (not with_summary or settings.send_reports_without_review)
+    )
+    email = Email(customer.email, subject, body, force_draft or not auto, html, images, report.id)
+    return _drafted(report, now, email, with_summary)
+
+
+def _drafted(report: SessionReport, now: datetime, email: Email, with_summary: bool) -> Email:
     report.status, report.claimed_until, report.next_attempt_at = "drafted", None, None
-    report.delivery = "draft" if as_draft else "sent"
+    report.delivery = "draft" if email.as_draft else "sent"
     report.with_summary = with_summary
     report.drafted_at = now
-    return Email(customer.email, subject, body, as_draft, html, images, report.id)
+    return email
 
 
 def deliver(mailer: Mailer, email: Email) -> None:
@@ -308,8 +356,26 @@ def _claim(now: datetime) -> int | None:
         return report.id
 
 
+# `type_rdv` in the agent's context (app/codex_agent/).
+CONTEXT_KINDS = {"session": "seance", "discovery": "appel_decouverte", "meeting": "reunion"}
+
+
 def session_context(db: Session, booking: Booking) -> dict:
-    purchase, settings = booking.purchase, get_settings(db)
+    settings = get_settings(db)
+    tz = settings.timezone
+    common = {
+        "type_rdv": CONTEXT_KINDS[booking.kind],
+        "client": booking.customer.name,
+        "date": f"{fmt.long_date(booking.start_datetime, tz)}, "
+        f"{fmt.hour_range(booking.start_datetime, booking.end_datetime, tz, 'h')}",
+        "consultant": settings.consultant_name,
+        "langue": booking.client_locale,
+    }
+    if booking.kind == "discovery":
+        return common | {"prestation": f"Appel découverte gratuit ({settings.discovery_duration_min} min)"}
+    if booking.kind == "meeting":
+        return common | {"titre": booking.title}
+    purchase = booking.purchase
     number = db.scalar(
         select(func.count(Booking.id)).where(
             Booking.purchase_id == purchase.id,
@@ -317,17 +383,12 @@ def session_context(db: Session, booking: Booking) -> dict:
             Booking.start_datetime <= booking.start_datetime,
         )
     )
-    return {
-        "client": booking.customer.name,
+    return common | {
         "prestation": purchase.product_name,
         "seance_numero": number,
-        "date": f"{fmt.long_date(booking.start_datetime, settings.timezone)}, "
-        f"{fmt.hour_range(booking.start_datetime, booking.end_datetime, settings.timezone, 'h')}",
         "heures_achetees": purchase.hours_purchased,
         "heures_restantes": purchase.hours_remaining,
         "derniere_seance": purchase.hours_remaining < 1,
-        "consultant": settings.consultant_name,
-        "langue": purchase.locale,
     }
 
 
@@ -511,11 +572,22 @@ def draft_without_summary(db: Session, report_id: int, now: datetime) -> Email |
     """« Créer le brouillon sans résumé » : the V1 email, always as a draft."""
     report = _locked(db, report_id)
     _ensure_idle(report, now)
+    if report.booking.kind == "meeting":
+        raise ReportActionError("Une réunion hors réservation n'a pas d'email sans compte rendu : relancez le résumé.")
     email = compose(db, report, now, with_summary=False, force_draft=True)
     db.commit()
     if email is None:
         raise ReportActionError(report.error, 409)
     return email
+
+
+def product_label(booking: Booking) -> str:
+    """What the admin lists show for a booking: the product bought, or what kind of free meeting it was."""
+    if booking.kind == "session":
+        return booking.purchase.product_name
+    if booking.kind == "discovery":
+        return "Appel découverte"
+    return booking.title or "Réunion"
 
 
 def overview(db: Session, tz: ZoneInfo, limit: int = 30) -> list[dict]:
@@ -537,9 +609,10 @@ def overview(db: Session, tz: ZoneInfo, limit: int = 30) -> list[dict]:
     return [
         {
             "booking_id": booking.id,
+            "kind": booking.kind,
             "customer": booking.customer.name,
             "email": booking.customer.email,
-            "product": booking.purchase.product_name,
+            "product": product_label(booking),
             "start": iso(booking.start_datetime),
             "end": iso(booking.end_datetime),
             "report": None

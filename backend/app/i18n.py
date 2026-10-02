@@ -58,6 +58,13 @@ TEXTS: dict[str, dict[str, str]] = {
             "Paiement Stripe :\n{payment}"
         ),
         "event_timezone": "Fuseau horaire du client : {tz}",
+        "subject_discovery_confirmation": "Votre appel découverte IAfluence est confirmé",
+        "subject_discovery_report": "Compte rendu de notre appel découverte",
+        "subject_discovery_thanks": "Merci pour notre appel découverte",
+        "subject_meeting_report": "Compte rendu de notre réunion du {date}",
+        "discovery_event_summary": "Appel découverte - {name}",
+        "discovery_event_description": "Appel découverte gratuit de {minutes} min, réservé sur le site IAfluence.",
+        "discovery_event_message": "Sujet indiqué :\n{message}",
     },
     "en": {
         "subject_booking_link": "Book your first AI consulting session",
@@ -76,6 +83,13 @@ TEXTS: dict[str, dict[str, str]] = {
             "Stripe payment:\n{payment}"
         ),
         "event_timezone": "Client time zone: {tz}",
+        "subject_discovery_confirmation": "Your IAfluence discovery call is confirmed",
+        "subject_discovery_report": "Summary of our discovery call",
+        "subject_discovery_thanks": "Thank you for our discovery call",
+        "subject_meeting_report": "Summary of our meeting on {date}",
+        "discovery_event_summary": "Discovery call - {name}",
+        "discovery_event_description": "Free {minutes}-minute discovery call, booked on the IAfluence website.",
+        "discovery_event_message": "Topic:\n{message}",
     },
     "es": {
         "subject_booking_link": "Reserve su primera sesión de asesoría en IA",
@@ -94,6 +108,13 @@ TEXTS: dict[str, dict[str, str]] = {
             "Pago Stripe:\n{payment}"
         ),
         "event_timezone": "Zona horaria del cliente: {tz}",
+        "subject_discovery_confirmation": "Su llamada de descubrimiento con IAfluence está confirmada",
+        "subject_discovery_report": "Resumen de nuestra llamada de descubrimiento",
+        "subject_discovery_thanks": "Gracias por nuestra llamada de descubrimiento",
+        "subject_meeting_report": "Resumen de nuestra reunión del {date}",
+        "discovery_event_summary": "Llamada de descubrimiento - {name}",
+        "discovery_event_description": "Llamada de descubrimiento gratuita de {minutes} min, reservada en el sitio web de IAfluence.",
+        "discovery_event_message": "Tema indicado:\n{message}",
     },
 }
 

@@ -1,0 +1,20 @@
+Prospect :
+{{ name }}
+
+Email :
+{{ email }}
+
+Rendez-vous :
+{{ date_short }}
+{{ hour_range }}
+{% if meet_url %}
+Visio :
+{{ meet_url }}
+{% endif %}
+Langue :
+{{ locale }}
+{% if message %}
+
+Sujet indiqué :
+{{ message }}
+{% endif %}

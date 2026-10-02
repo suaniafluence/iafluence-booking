@@ -9,10 +9,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import i18n
-from app.models import Booking, BookingToken, Purchase, Settings
+from app.models import Booking, BookingToken, Customer, Purchase, Settings
 from app.services import settings_service
 from app.services.availability import (
     Interval,
+    SlotRules,
     available_slots,
     booking_window,
     busy_query_range,
@@ -126,9 +127,11 @@ def list_availability(
     now: datetime,
     frm: datetime | None = None,
     to: datetime | None = None,
+    rules: SlotRules | None = None,
 ) -> list[Interval]:
+    """`rules`: the paid sessions' by default (the discovery call passes its own duration)."""
     settings = settings_service.get_settings(db)
-    rules = settings_service.slot_rules(db, settings)
+    rules = rules or settings_service.slot_rules(db, settings)
     window = booking_window(rules, now, frm, to)
     if window.start >= window.end:
         return []
@@ -193,7 +196,47 @@ def book(
         db.rollback()
         raise InvalidToken() if purchase.payment_status != "paid" else NoHoursLeft()
 
-    # R06 — fresh free/busy check (no cache) right before creating the event.
+    if locale := i18n.normalize_locale(locale):
+        purchase.locale = locale
+    if customer_timezone := i18n.valid_timezone(customer_timezone):
+        purchase.customer_timezone = customer_timezone
+
+    customer = purchase.customer
+    hours_remaining_after = purchase.hours_remaining - 1
+    # Rolled back with the transaction if the slot turns out to be taken.
+    purchase.hours_booked = Purchase.hours_booked + 1
+    booking = reserve(
+        db,
+        calendar,
+        settings,
+        rules,
+        slot,
+        Booking(purchase_id=purchase.id, customer_id=customer.id, kind="session"),
+        summary=i18n.text(purchase.locale, "event_summary", name=customer.name),
+        description=_event_description(purchase, hours_remaining_after, settings),
+        attendee=customer,
+    )
+    db.refresh(purchase)
+    log.info("booking %s confirmed for purchase %s", booking.id, purchase.id)
+    return booking
+
+
+def reserve(
+    db: Session,
+    calendar: CalendarGateway,
+    settings: Settings,
+    rules: SlotRules,
+    slot: Interval,
+    booking: Booking,
+    *,
+    summary: str,
+    description: str,
+    attendee: Customer,
+) -> Booking:
+    """Second half of a booking, under BOOKING_LOCK_KEY: fresh free/busy (R06), Google event, then the row.
+
+    Any failure rolls the transaction back; a conflict caught by the database deletes the event again.
+    """
     padded = Interval(slot.start - rules.buffer_before, slot.end + rules.buffer_after)
     try:
         busy = calendar.free_busy(settings_service.busy_calendar_ids(db, settings), padded.start, padded.end)
@@ -205,23 +248,16 @@ def book(
         db.rollback()
         raise SlotTaken()
 
-    if locale := i18n.normalize_locale(locale):
-        purchase.locale = locale
-    if customer_timezone := i18n.valid_timezone(customer_timezone):
-        purchase.customer_timezone = customer_timezone
-
-    customer = purchase.customer
-    hours_remaining_after = purchase.hours_remaining - 1
     try:
         event = calendar.create_event(
             settings.booking_calendar_id,
-            summary=i18n.text(purchase.locale, "event_summary", name=customer.name),
-            description=_event_description(purchase, hours_remaining_after, settings),
+            summary=summary,
+            description=description,
             start=slot.start.astimezone(rules.tz),
             end=slot.end.astimezone(rules.tz),
             timezone=settings.timezone,
-            attendee_email=customer.email,
-            attendee_name=customer.name,
+            attendee_email=attendee.email,
+            attendee_name=attendee.name,
             with_meet=settings.meet_enabled,
         )
     except CalendarWriteError:
@@ -229,17 +265,10 @@ def book(
         log.exception("event creation failed")
         raise CalendarWriteFailed()
 
-    booking = Booking(
-        purchase_id=purchase.id,
-        customer_id=customer.id,
-        start_datetime=slot.start,
-        end_datetime=slot.end,
-        google_event_id=event.event_id,
-        meet_url=event.meet_url,
-        status="confirmed",
-    )
+    booking.start_datetime, booking.end_datetime = slot.start, slot.end
+    booking.google_event_id, booking.meet_url = event.event_id, event.meet_url
+    booking.status = "confirmed"
     db.add(booking)
-    purchase.hours_booked = Purchase.hours_booked + 1
     try:
         db.commit()
     except IntegrityError:
@@ -253,8 +282,6 @@ def book(
         raise
     freebusy_cache.clear()
     db.refresh(booking)
-    db.refresh(purchase)
-    log.info("booking %s confirmed for purchase %s", booking.id, purchase.id)
     return booking
 
 
@@ -275,7 +302,7 @@ class CalendarDeleteFailed(BookingError):
 
 
 def cancel(db: Session, calendar: CalendarGateway, booking_id: int, now: datetime) -> Booking:
-    """Admin cancellation (moved or cancelled session): remove the event and give the hour back."""
+    """Admin cancellation (moved or cancelled session): remove the event and give the hour back (if one was used)."""
     db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": BOOKING_LOCK_KEY})
     booking = db.scalar(select(Booking).where(Booking.id == booking_id).with_for_update())
     if booking is None:
@@ -292,7 +319,8 @@ def cancel(db: Session, calendar: CalendarGateway, booking_id: int, now: datetim
             log.exception("could not delete event %s", booking.google_event_id)
             raise CalendarDeleteFailed()
     booking.status = "cancelled"
-    booking.purchase.hours_booked = Purchase.hours_booked - 1
+    if booking.purchase is not None:
+        booking.purchase.hours_booked = Purchase.hours_booked - 1
     db.commit()
     freebusy_cache.clear()
     db.refresh(booking)

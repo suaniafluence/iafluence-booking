@@ -1,0 +1,31 @@
+Hello {{ name }},
+
+{% if kind == "discovery" %}
+Thank you for our discovery call on {{ date_long }}. Here is a summary of what we discussed.
+{% else %}
+Thank you for our meeting on {{ date_long }}. Here is the summary.
+{% endif %}
+{% for title, items in sections %}
+
+{{ title }}
+{% for item in items %}
+- {{ item }}
+{% endfor %}
+{% endfor %}
+{% if image_cid %}
+
+An infographic of our discussion is attached to this email.
+{% endif %}
+{% if kind == "discovery" %}
+
+If you would like to take things further, our AI consulting packages are described here:
+
+{{ shop_url }}
+
+You can also simply reply to this email to talk it over.
+{% endif %}
+
+Looking forward to speaking with you,
+
+{{ consultant_name }}
+IAfluence

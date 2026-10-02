@@ -1,8 +1,8 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from pydantic import AwareDatetime
 from sqlalchemy.orm import Session
 
@@ -16,14 +16,21 @@ from app.schemas import (
     BookingOut,
     CheckoutOut,
     CustomerOut,
+    DiscoveryIn,
+    DiscoveryInfoOut,
+    DiscoveryOut,
     PurchaseOut,
     Slot,
 )
-from app.services import booking_service, notifications, stripe_service
+from app.services import booking_service, discovery, notifications, stripe_service
+from app.services.rate_limit import RateLimiter, client_ip
 from app.services.settings_service import get_settings
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
+
+# Free discovery call: attempts per visitor address (a refused slot counts too).
+discovery_limiter = RateLimiter(limit=10, window=timedelta(hours=1))
 
 
 class CheckoutNotFound(booking_service.BookingError):
@@ -111,4 +118,62 @@ def create_booking(
         end=booking.end_datetime.astimezone(tz),
         meet_url=booking.meet_url,
         **booking_service.hours_summary(booking.purchase),
+    )
+
+
+# --- free discovery call ------------------------------------------------------------------------------------------
+
+
+@router.get("/discovery", response_model=DiscoveryInfoOut)
+def discovery_info(db: Session = Depends(get_db)):
+    settings = discovery.open_settings(db)
+    return DiscoveryInfoOut(
+        consultant_name=settings.consultant_name,
+        timezone=settings.timezone,
+        duration_min=settings.discovery_duration_min,
+    )
+
+
+@router.get("/discovery/availability", response_model=AvailabilityOut)
+def discovery_availability(
+    frm: AwareDatetime | None = Query(None, alias="from"),
+    to: AwareDatetime | None = None,
+    db: Session = Depends(get_db),
+    calendar=Depends(get_calendar),
+    now: datetime = Depends(get_now),
+):
+    slots = discovery.availability(db, calendar, now, frm, to)
+    tz = ZoneInfo(get_settings(db).timezone)
+    return AvailabilityOut(slots=[Slot(start=s.start.astimezone(tz), end=s.end.astimezone(tz)) for s in slots])
+
+
+@router.post("/discovery", response_model=DiscoveryOut, status_code=201)
+def book_discovery(
+    body: DiscoveryIn,
+    request: Request,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    calendar=Depends(get_calendar),
+    mailer=Depends(get_mailer),
+    now: datetime = Depends(get_now),
+):
+    if body.website:
+        raise discovery.DiscoveryRejected()
+    if not discovery_limiter.hit(client_ip(request), now):
+        raise discovery.TooManyAttempts()
+    booking = discovery.book(
+        db,
+        calendar,
+        name=body.name,
+        email=str(body.email).lower(),
+        start=body.start,
+        now=now,
+        message=body.message or None,
+        locale=body.locale,
+        customer_timezone=body.timezone,
+    )
+    background.add_task(notifications.send_discovery_confirmations, mailer, booking.id, body.message or None)
+    tz = ZoneInfo(get_settings(db).timezone)
+    return DiscoveryOut(
+        start=booking.start_datetime.astimezone(tz), end=booking.end_datetime.astimezone(tz), meet_url=booking.meet_url
     )

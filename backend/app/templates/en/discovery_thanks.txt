@@ -1,0 +1,14 @@
+Hello {{ name }},
+
+Thank you for our discovery call on {{ date_long }} and for your time.
+
+If you would like to take things further, our AI consulting packages are described here:
+
+{{ shop_url }}
+
+You can also simply reply to this email to talk it over.
+
+Looking forward to speaking with you,
+
+{{ consultant_name }}
+IAfluence

@@ -73,6 +73,7 @@ def test_overview_lists_finished_sessions_with_their_report(ended, admin, fakes)
     [row] = reports["sessions"]
     assert row == {
         "booking_id": 1,
+        "kind": "session",
         "customer": "Marie Martin",
         "email": CLIENT,
         "product": "Conseil IA - 3h",

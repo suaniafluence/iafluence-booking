@@ -33,7 +33,8 @@ def send_booking_cancelled(mailer: Mailer, booking_id: int) -> None:
     """Admin cancelled a session: the hour is back, send the link to pick another slot."""
     with SessionLocal() as db:
         booking = db.get(Booking, booking_id)
-        token = active_token(db, booking.purchase_id)
+        # A discovery call has no booking link: the admin writes to the prospect directly.
+        token = active_token(db, booking.purchase_id) if booking.purchase_id else None
         if token is None:
             log.info("booking %s cancelled: no active link, client not emailed", booking_id)
             return
@@ -187,3 +188,59 @@ def send_refund_alert(mailer: Mailer, purchase_id: int, full_refund: bool) -> No
                 "Le lien de réservation a été révoqué.\n", ""
             )
         send_safely(mailer, settings.admin_email, "REMBOURSEMENT — Conseil IA", body)
+
+
+def send_discovery_confirmations(mailer: Mailer, booking_id: int, message: str | None = None) -> None:
+    """Free discovery call booked: the prospect's confirmation, and a heads-up to the admin with the topic."""
+    with SessionLocal() as db:
+        booking = db.get(Booking, booking_id)
+        customer, settings = booking.customer, get_settings(db)
+        tz, locale = settings.timezone, booking.client_locale
+        paris = _when(booking, tz, locale)
+        local_tz = booking.client_timezone or tz
+        local = _when(booking, local_tz, locale)
+        body = render(
+            f"{locale}/discovery_confirmation.txt",
+            name=customer.name,
+            minutes=settings.discovery_duration_min,
+            **local,
+            local_city=fmt.tz_city(local_tz),
+            paris=paris if local != paris else None,
+            meet_url=booking.meet_url,
+            consultant_name=settings.consultant_name,
+        )
+        send_safely(mailer, customer.email, text(locale, "subject_discovery_confirmation"), body)
+
+        admin_body = render(
+            "admin_new_discovery.txt",
+            name=customer.name,
+            email=customer.email,
+            date_short=fmt.short_date(booking.start_datetime, tz),
+            hour_range=fmt.hour_range(booking.start_datetime, booking.end_datetime, tz, ":"),
+            meet_url=booking.meet_url,
+            locale=locale,
+            message=message,
+        )
+        send_safely(mailer, settings.admin_email, "NOUVEL APPEL DÉCOUVERTE", admin_body)
+
+
+def send_discovery_thanks(mailer: Mailer, booking_id: int) -> None:
+    """End of a discovery call without session reports: thanks and where to buy consulting hours."""
+    with SessionLocal() as db:
+        booking = db.get(Booking, booking_id)
+        customer, settings = booking.customer, get_settings(db)
+        locale = booking.client_locale
+        body = render(
+            f"{locale}/discovery_thanks.txt",
+            name=customer.name,
+            date_long=fmt.inline_date(booking.start_datetime, settings.timezone, locale),
+            shop_url=get_config().shop_url,
+            consultant_name=settings.consultant_name,
+        )
+        send_safely(
+            mailer,
+            customer.email,
+            text(locale, "subject_discovery_thanks"),
+            body,
+            as_draft=not customer.auto_send_next_link,
+        )
