@@ -224,12 +224,12 @@ describe("SessionReports", () => {
   });
 
   it("prepares the email again after a Gmail failure", async () => {
+    const gmailError = "L'email n'a pas pu être préparé dans Gmail (voir les logs de l'API).";
     vi.spyOn(api, "adminRetryReportEmail")
-      .mockRejectedValueOnce(new ApiError(409, "Cet email n'a pas échoué : rien à recréer."))
+      .mockRejectedValueOnce(new ApiError(502, gmailError))
       .mockResolvedValueOnce({ id: 7, status: "drafted" });
     const onChange = vi.fn();
     const user = userEvent.setup();
-    const gmailError = "L'email n'a pas pu être préparé dans Gmail (voir les logs de l'API).";
     render(
       <SessionReports
         reports={reports({
@@ -242,16 +242,16 @@ describe("SessionReports", () => {
       />,
     );
     const items = within(screen.getByRole("list", { name: "Séances terminées" })).getAllByRole("listitem");
-    expect(items[0]).toHaveTextContent(`Échec GmailTentative le jeudi 8 octobre 2026 à 15:12${gmailError}AperçuRecréer l’email`);
+    expect(items[0]).toHaveTextContent(`Échec GmailTentative le jeudi 8 octobre 2026 à 15:12${gmailError}AperçuRecréer le brouillon`);
     expect(within(items[0]).queryByRole("button", { name: /Relancer|sans résumé/ })).not.toBeInTheDocument();
-    expect(within(items[1]).queryByRole("button", { name: "Recréer l’email" })).not.toBeInTheDocument();
+    expect(within(items[1]).queryByRole("button", { name: "Recréer le brouillon" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Recréer l’email" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Cet email n'a pas échoué : rien à recréer.");
+    await user.click(screen.getByRole("button", { name: "Recréer le brouillon" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(gmailError);
     expect(onChange).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Recréer l’email" }));
+    await user.click(screen.getByRole("button", { name: "Recréer le brouillon" }));
     expect(api.adminRetryReportEmail).toHaveBeenLastCalledWith(7);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Email de Marie Martin renvoyé à Gmail.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Brouillon de Marie Martin recréé dans Gmail.");
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
