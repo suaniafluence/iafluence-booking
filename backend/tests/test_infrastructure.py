@@ -93,7 +93,24 @@ def test_api_clients_are_built_once(monkeypatch, factory, service):
         assert fn() is fn()
     finally:
         fn.cache_clear()
-    assert built == [(service, {"credentials": "CREDS", "cache_discovery": False})]
+    assert built == [
+        (
+            service,
+            {"credentials": "CREDS", "requestBuilder": google_client.fresh_connection, "cache_discovery": False},
+        )
+    ]
+
+
+def test_each_google_call_opens_its_own_connection():
+    """A cached connection breaks (BrokenPipeError) once Google closes it after a while idle."""
+    from google.oauth2.credentials import Credentials
+
+    creds = Credentials(token="tok")
+    api = google_client.build("gmail", "v1", credentials=creds, requestBuilder=google_client.fresh_connection)
+    first = api.users().drafts().create(userId="me", body={})
+    second = api.users().drafts().create(userId="me", body={})
+    assert first.http is not second.http and first.http.http is not second.http.http
+    assert first.http.credentials is creds is second.http.credentials  # one access token for all calls
 
 
 # --- demo fakes -----------------------------------------------------------------------

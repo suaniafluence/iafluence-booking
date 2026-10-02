@@ -126,6 +126,7 @@ def test_report_endpoints_need_the_admin(client):
         ("get", "/api/admin/reports/1/image.png"),
         ("post", "/api/admin/reports/1/retry"),
         ("post", "/api/admin/reports/1/draft-without-summary"),
+        ("post", "/api/admin/reports/1/retry-email"),
         ("patch", "/api/admin/report-settings"),
         ("get", "/api/admin/codex"),
         ("post", "/api/admin/codex/login"),
@@ -219,6 +220,72 @@ def test_draft_without_summary_on_a_refunded_purchase(ended, admin, fakes):
     r = admin.post(f"/api/admin/reports/{ended}/draft-without-summary")
     assert (r.status_code, r.json()["detail"]) == (409, "Achat remboursé : aucun email préparé.")
     assert report().status == "failed" and fakes["mailer"].drafts == []
+
+
+def gmail_failed(fakes, ended):
+    """The summary was written, then Gmail refused the draft."""
+    set_report(status="ready", summary=SYNTHESE, fireflies_transcript_id="ff_1")
+    fakes["mailer"].fail = True
+    session_reports.draft_ready(fakes["mailer"], END + timedelta(minutes=1))
+    fakes["mailer"].fail = False
+    got = report()
+    assert (got.status, got.delivery, got.error) == ("drafted", "failed", session_reports.GMAIL_FAILED)
+
+
+def test_overview_shows_a_gmail_failure(ended, admin, fakes):
+    gmail_failed(fakes, ended)
+    got = sessions(admin)["sessions"][0]["report"]
+    assert (got["status"], got["delivery"], got["error"]) == ("drafted", "failed", session_reports.GMAIL_FAILED)
+
+
+def test_retry_email_prepares_the_same_email_again(ended, admin, fakes):
+    gmail_failed(fakes, ended)
+    at(END + timedelta(hours=2))
+    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    assert r.json() == {"id": ended, "status": "drafted"}
+    [mail] = fakes["mailer"].drafts
+    assert (mail["to"], mail["subject"]) == (CLIENT, session_reports.SUBJECT_NEXT) and mail["html"]
+    got = report()
+    assert (got.status, got.delivery, got.with_summary, got.error) == ("drafted", "draft", True, None)
+    assert got.drafted_at == END + timedelta(hours=2)
+    # Done: a second click does nothing.
+    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    assert (r.status_code, r.json()["detail"]) == (409, "Cet email n'a pas échoué : rien à recréer.")
+    assert len(fakes["mailer"].drafts) == 1
+
+
+def test_retry_email_fails_again(ended, admin, fakes):
+    gmail_failed(fakes, ended)
+    fakes["mailer"].fail = True
+    assert admin.post(f"/api/admin/reports/{ended}/retry-email").status_code == 200
+    got = report()
+    assert (got.delivery, got.error) == ("failed", session_reports.GMAIL_FAILED)
+
+
+def test_retry_email_without_summary_stays_without(ended, admin, fakes):
+    set_report(status="drafted", delivery="failed", with_summary=False, summary=SYNTHESE)
+    admin.post(f"/api/admin/reports/{ended}/retry-email")
+    [mail] = fakes["mailer"].drafts
+    assert mail["subject"] == session_reports.SUBJECT_NEXT_V1 and report().with_summary is False
+
+
+def test_retry_email_on_a_refunded_purchase(ended, admin, fakes):
+    gmail_failed(fakes, ended)
+    with SessionLocal() as db:
+        db.execute(update(Purchase).values(payment_status="refunded"))
+        db.commit()
+    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    assert (r.status_code, r.json()["detail"]) == (409, "Achat remboursé : aucun email préparé.")
+    assert report().status == "failed" and fakes["mailer"].drafts == []
+
+
+@pytest.mark.parametrize("values", [{"status": "waiting_transcript"}, {"status": "drafted", "delivery": "draft"}])
+def test_retry_email_only_after_a_gmail_failure(ended, admin, fakes, values):
+    set_report(**values)
+    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    assert (r.status_code, r.json()["detail"]) == (409, "Cet email n'a pas échoué : rien à recréer.")
+    assert admin.post("/api/admin/reports/999/retry-email").status_code == 404
+    assert fakes["mailer"].drafts == []
 
 
 def test_send_without_review_setting(admin):

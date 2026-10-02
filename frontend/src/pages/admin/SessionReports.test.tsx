@@ -23,6 +23,8 @@ describe("reportLabel", () => {
     [sessionReport({ delivery: "sent" }), "Envoyé avec compte rendu", "ok"],
     [sessionReport({ with_summary: false }), "Brouillon créé sans compte rendu", "off"],
     [sessionReport({ with_summary: false, delivery: "sent" }), "Envoyé sans compte rendu", "off"],
+    [sessionReport({ delivery: "failed" }), "Échec Gmail", "fail"],
+    [sessionReport({ with_summary: false, delivery: "failed" }), "Échec Gmail", "fail"],
   ])("%# → %s", (report, label, tone) => {
     expect(reportLabel(report)).toEqual([label, tone]);
   });
@@ -218,6 +220,38 @@ describe("SessionReports", () => {
     expect(onChange).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Créer le brouillon sans résumé" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Brouillon sans résumé créé pour Marie Martin.");
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("prepares the email again after a Gmail failure", async () => {
+    vi.spyOn(api, "adminRetryReportEmail")
+      .mockRejectedValueOnce(new ApiError(409, "Cet email n'a pas échoué : rien à recréer."))
+      .mockResolvedValueOnce({ id: 7, status: "drafted" });
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    const gmailError = "L'email n'a pas pu être préparé dans Gmail (voir les logs de l'API).";
+    render(
+      <SessionReports
+        reports={reports({
+          sessions: [
+            finishedSession(sessionReport({ delivery: "failed", error: gmailError })),
+            finishedSession(sessionReport({ id: 8 }), { booking_id: 32 }),
+          ],
+        })}
+        onChange={onChange}
+      />,
+    );
+    const items = within(screen.getByRole("list", { name: "Séances terminées" })).getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent(`Échec GmailTentative le jeudi 8 octobre 2026 à 15:12${gmailError}AperçuRecréer l’email`);
+    expect(within(items[0]).queryByRole("button", { name: /Relancer|sans résumé/ })).not.toBeInTheDocument();
+    expect(within(items[1]).queryByRole("button", { name: "Recréer l’email" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Recréer l’email" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Cet email n'a pas échoué : rien à recréer.");
+    expect(onChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Recréer l’email" }));
+    expect(api.adminRetryReportEmail).toHaveBeenLastCalledWith(7);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Email de Marie Martin renvoyé à Gmail.");
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 

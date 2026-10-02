@@ -323,37 +323,18 @@ def draft_without_summary(
     return {"id": report_id, "status": "drafted"}
 
 
-@router.get("/meetings", dependencies=[Depends(require_admin)])
-def list_meetings(db: Session = Depends(get_db), fireflies=Depends(get_fireflies), now: datetime = Depends(get_now)):
-    """« Autres réunions » : Fireflies recordings of the last 7 days, to summarize a meeting booked elsewhere."""
-    if not session_reports.enabled(db):
-        raise HTTPException(409, "Connectez d'abord Fireflies et Codex.")
-    try:
-        return {"meetings": meetings.recent(db, fireflies, now, ZoneInfo(get_settings(db).timezone))}
-    except FirefliesError as e:
-        raise HTTPException(502, f"Fireflies ne répond pas : {e}.")
-
-
-@router.post("/meetings", status_code=201, dependencies=[Depends(require_admin)])
-def create_meeting_report(body: MeetingReportIn, db: Session = Depends(get_db), now: datetime = Depends(get_now)):
-    """Summarize that recording for that person: the report is written within minutes, then left as a Gmail draft."""
-    if not session_reports.enabled(db):
-        raise HTTPException(409, "Connectez d'abord Fireflies et Codex.")
-    try:
-        report = meetings.create_report(
-            db,
-            transcript_id=body.transcript_id,
-            title=body.title or None,
-            start=body.start,
-            end=body.end,
-            name=body.name,
-            email=str(body.email).lower(),
-            locale=body.locale,
-            now=now,
-        )
-    except meetings.MeetingError as e:
-        raise HTTPException(e.status_code, e.message)
-    return {"report_id": report.id, "booking_id": report.booking_id}
+@router.post("/reports/{report_id}/retry-email", dependencies=[Depends(require_admin)])
+def retry_report_email(
+    report_id: int,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    mailer=Depends(get_mailer),
+    now: datetime = Depends(get_now),
+):
+    """« Recréer l'email » : Gmail refused the draft (or the email) of this report."""
+    email = _report_action(lambda: session_reports.retry_email(db, report_id, now))
+    background.add_task(session_reports.deliver, mailer, email)
+    return {"id": report_id, "status": "drafted"}
 
 
 @router.patch("/report-settings", dependencies=[Depends(require_admin)])

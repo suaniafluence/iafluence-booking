@@ -105,6 +105,8 @@ export const api = {
     request<{ id: number; status: ReportStatus }>(`/api/admin/reports/${reportId}/draft-without-summary`, {
       method: "POST",
     }),
+  adminRetryReportEmail: (reportId: number) =>
+    request<{ id: number; status: ReportStatus }>(`/api/admin/reports/${reportId}/retry-email`, { method: "POST" }),
   adminSetReportSettings: (sendWithoutReview: boolean) =>
     request<{ send_without_review: boolean }>("/api/admin/report-settings", {
       method: "PATCH",
@@ -157,7 +159,8 @@ export type SessionReport = {
   error: string | null;
   synthese: Synthese | null;
   has_image: boolean;
-  delivery: "draft" | "sent" | null;
+  // failed: Gmail refused the email, which the admin can prepare again.
+  delivery: "draft" | "sent" | "failed" | null;
   with_summary: boolean | null;
   drafted_at: string | null;
   erased: boolean;

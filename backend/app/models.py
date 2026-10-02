@@ -165,7 +165,8 @@ class SessionReport(Base):
     image_png: Mapped[bytes | None] = mapped_column(LargeBinary)
     # Short reason shown in the admin — never transcript content.
     error: Mapped[str | None] = mapped_column(Text)
-    # How the client email went out: draft | sent; with_summary tells whether it carried the summary.
+    # How the client email went out: draft | sent | failed (Gmail refused it); with_summary tells whether it
+    # carried the summary.
     delivery: Mapped[str | None] = mapped_column(String(16))
     with_summary: Mapped[bool | None] = mapped_column(Boolean)
     drafted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

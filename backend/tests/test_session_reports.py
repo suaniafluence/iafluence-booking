@@ -527,7 +527,11 @@ def test_gmail_failure_is_shown_on_the_report(finished, fakes, gw):
     fakes["mailer"].fail = True
     session_reports.process(gw, END + POLL)
     r = report()
-    assert (r.status, r.error) == ("drafted", "L'email n'a pas pu être préparé dans Gmail (voir les logs de l'API).")
+    assert (r.status, r.delivery, r.error) == (
+        "drafted",
+        "failed",
+        "L'email n'a pas pu être préparé dans Gmail (voir les logs de l'API).",
+    )
 
 
 # --- concurrency -----------------------------------------------------------------------------------------------------
