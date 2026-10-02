@@ -224,7 +224,7 @@ def _drafted(report: SessionReport, now: datetime, email: Email, with_summary: b
     return email
 
 
-def deliver(mailer: Mailer, email: Email) -> None:
+def deliver(mailer: Mailer, email: Email) -> bool:
     """After the commit. A failure is logged by send_safely and shown on the report, which can then be retried."""
     ok = send_safely(
         mailer, email.to, email.subject, email.body, as_draft=email.as_draft, html=email.html, images=email.images
@@ -237,6 +237,7 @@ def deliver(mailer: Mailer, email: Email) -> None:
                 .values(delivery="failed", error=GMAIL_FAILED)
             )
             db.commit()
+    return ok
 
 
 def alert(db: Session, report: SessionReport, problem: str, action: str) -> Email:
@@ -585,16 +586,26 @@ def draft_without_summary(db: Session, report_id: int, now: datetime) -> Email |
 
 
 def retry_email(db: Session, report_id: int, now: datetime) -> Email | None:
-    """« Recréer l'email » after a Gmail failure: the same email, prepared again with the current rules."""
+    """« Recréer le brouillon » after a Gmail failure: the same email, always as a draft — a failed send may still
+    have reached the client (timeout after Gmail accepted it), so it is never sent twice automatically."""
     report = _locked(db, report_id)
     if report.status != "drafted" or report.delivery != "failed":
         raise ReportActionError("Cet email n'a pas échoué : rien à recréer.")
     report.error = None
-    email = compose(db, report, now, with_summary=bool(report.with_summary))
+    email = compose(db, report, now, with_summary=bool(report.with_summary), force_draft=True)
     db.commit()
     if email is None:
         raise ReportActionError(report.error, 409)
     return email
+
+
+def product_label(booking: Booking) -> str:
+    """What the admin lists show for a booking: the product bought, or what kind of free meeting it was."""
+    if booking.kind == "session":
+        return booking.purchase.product_name
+    if booking.kind == "discovery":
+        return "Appel découverte"
+    return booking.title or "Réunion"
 
 
 def overview(db: Session, tz: ZoneInfo, limit: int = 30) -> list[dict]:

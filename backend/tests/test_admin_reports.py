@@ -255,11 +255,25 @@ def test_retry_email_prepares_the_same_email_again(ended, admin, fakes):
 
 
 def test_retry_email_fails_again(ended, admin, fakes):
+    """Gmail is called before answering: the admin learns at once that this attempt failed too."""
     gmail_failed(fakes, ended)
     fakes["mailer"].fail = True
-    assert admin.post(f"/api/admin/reports/{ended}/retry-email").status_code == 200
+    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    assert (r.status_code, r.json()["detail"]) == (502, session_reports.GMAIL_FAILED)
     got = report()
     assert (got.delivery, got.error) == ("failed", session_reports.GMAIL_FAILED)
+    assert sessions(admin)["sessions"][0]["report"]["delivery"] == "failed"
+
+
+def test_retry_email_never_sends_automatically(ended, admin, fakes):
+    """A failed send may have reached the client anyway (timeout after Gmail accepted it): no second send."""
+    with SessionLocal() as db:
+        db.execute(update(Customer).values(auto_send_next_link=True))
+        db.commit()
+    set_report(status="drafted", delivery="failed", with_summary=False, error=session_reports.GMAIL_FAILED)
+    assert admin.post(f"/api/admin/reports/{ended}/retry-email").status_code == 200
+    assert fakes["mailer"].sent == [] and len(fakes["mailer"].drafts) == 1
+    assert report().delivery == "draft"
 
 
 def test_retry_email_without_summary_stays_without(ended, admin, fakes):

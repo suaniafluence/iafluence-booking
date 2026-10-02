@@ -228,10 +228,10 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                         disabled={busy === r.id}
                         className="font-medium text-brand-600 underline disabled:text-slate-400"
                         onClick={() =>
-                          act(s, () => api.adminRetryReportEmail(r.id), `Email de ${s.customer} renvoyé à Gmail.`)
+                          act(s, () => api.adminRetryReportEmail(r.id), `Brouillon de ${s.customer} recréé dans Gmail.`)
                         }
                       >
-                        Recréer l’email
+                        Recréer le brouillon
                       </button>
                     )}
                   </div>
