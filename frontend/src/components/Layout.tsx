@@ -7,18 +7,20 @@ export function Layout({ children, wide = false }: { children: ReactNode; wide?:
   const inRouter = useInRouterContext(); // the admin page is also rendered on its own
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b border-slate-200 bg-white">
-        <div className={`mx-auto ${wide ? "max-w-6xl" : "max-w-2xl"} px-4 py-4 flex items-center gap-3`}>
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-900 text-sm font-bold text-white">IA</span>
-          <div className="leading-tight">
-            <div className="font-semibold text-slate-900">IAfluence</div>
-            <div className="text-xs text-slate-500">{t.tagline}</div>
+      <header className="bg-brand-900 text-white">
+        <div className={`mx-auto ${wide ? "max-w-6xl" : "max-w-2xl"} flex min-h-[68px] items-center gap-3 px-4`}>
+          <span className="flex rounded bg-white px-1.5 py-1">
+            <img src="/logo.jpg" alt="" className="block h-7 w-[34px] object-contain" />
+          </span>
+          <div className="leading-none">
+            <div className="font-display text-xl font-bold">IAfluence</div>
+            <div className="mt-[3px] text-[11px] font-medium leading-tight text-slate-300">{t.tagline}</div>
           </div>
           {inRouter && <LanguageSwitcher />}
         </div>
       </header>
-      <main className={`mx-auto w-full ${wide ? "max-w-6xl" : "max-w-2xl"} flex-1 px-4 py-8 sm:py-12`}>{children}</main>
-      <footer className="py-6 text-center text-xs text-slate-400">© IAfluence</footer>
+      <main className={`mx-auto w-full ${wide ? "max-w-6xl" : "max-w-2xl"} flex-1 px-4 py-8 sm:py-10`}>{children}</main>
+      <footer className="py-6 text-center text-xs text-slate-500">© IAfluence</footer>
     </div>
   );
 }
@@ -31,7 +33,7 @@ function LanguageSwitcher() {
   if (!isLang(lang)) return null;
   const rest = pathname.slice(lang.length + 1);
   return (
-    <nav aria-label={t.languages} className="ml-auto flex gap-1 text-xs font-semibold">
+    <nav aria-label={t.languages} className="ml-auto flex gap-0.5 text-xs font-semibold">
       {LANGS.map((l) => (
         <Link
           key={l}
@@ -41,8 +43,8 @@ function LanguageSwitcher() {
           hrefLang={l}
           aria-label={LANG_NAMES[l]}
           aria-current={l === lang ? "true" : undefined}
-          className={`rounded-md px-2 py-1 transition ${
-            l === lang ? "bg-brand-50 text-brand-700" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          className={`flex min-h-8 items-center px-1.5 ${
+            l === lang ? "text-white underline underline-offset-4" : "text-slate-300 hover:text-brand-400"
           }`}
         >
           {l.toUpperCase()}
@@ -53,7 +55,7 @@ function LanguageSwitcher() {
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 ${className}`}>{children}</section>;
+  return <section className={`rounded border border-slate-200 bg-white p-6 sm:p-7 ${className}`}>{children}</section>;
 }
 
 export function Button({
@@ -64,11 +66,11 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" }) {
   const styles =
     variant === "primary"
-      ? "bg-brand-600 text-white hover:bg-brand-700 disabled:bg-slate-300"
-      : "bg-white text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50 disabled:text-slate-400";
+      ? "border-transparent bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
+      : "border-slate-300 bg-white text-slate-900 hover:border-brand-600 hover:text-brand-600 disabled:opacity-50";
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed ${styles} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded border-[1.5px] px-5 py-2.5 text-[15px] font-bold leading-tight transition-colors focus:outline-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-brand-400 active:translate-y-px disabled:pointer-events-none ${styles} ${className}`}
       {...props}
     >
       {children}
@@ -86,9 +88,9 @@ export function Spinner({ label }: { label: string }) {
 }
 
 export function Alert({ children, tone = "error" }: { children: ReactNode; tone?: "error" | "info" }) {
-  const styles = tone === "error" ? "bg-red-50 text-red-800 ring-red-200" : "bg-brand-50 text-brand-900 ring-brand-100";
+  const styles = tone === "error" ? "bg-red-50 text-red-800" : "bg-brand-50 text-brand-900";
   return (
-    <div role="alert" className={`rounded-xl px-4 py-3 text-sm ring-1 ${styles}`}>
+    <div role="alert" className={`rounded px-4 py-3 text-sm ${styles}`}>
       {children}
     </div>
   );
@@ -96,11 +98,11 @@ export function Alert({ children, tone = "error" }: { children: ReactNode; tone?
 
 export function HoursSummary({ rows }: { rows: [string, string][] }) {
   return (
-    <dl className="divide-y divide-slate-100 rounded-xl bg-slate-50 px-4 text-sm">
+    <dl className="divide-y divide-slate-200 rounded bg-slate-50 px-4 text-sm">
       {rows.map(([k, v]) => (
         <div key={k} className="flex justify-between py-3">
           <dt className="text-slate-500">{k}</dt>
-          <dd className="font-semibold text-slate-900">{v}</dd>
+          <dd className="font-bold text-slate-900 tabular-nums">{v}</dd>
         </div>
       ))}
     </dl>

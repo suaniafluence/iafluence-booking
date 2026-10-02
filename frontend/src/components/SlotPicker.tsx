@@ -53,7 +53,7 @@ export function SlotPicker({
 
   return (
     <Card>
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.picker.title}</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{t.picker.title}</h1>
       <p className="mt-1 text-sm text-slate-500">{parisClock ? texts.parisTimes : texts.localTimes(tzCity(tz))}</p>
 
       {notice && (
@@ -93,19 +93,19 @@ export function SlotPicker({
                   onClick={() => setDay(k)}
                   className={`flex min-w-[4.5rem] flex-col items-center rounded-xl px-3 py-2 text-sm ring-1 transition ${
                     active
-                      ? "bg-brand-600 text-white ring-brand-600"
+                      ? "bg-brand-900 text-white ring-brand-900"
                       : "bg-white text-slate-700 ring-slate-200 hover:ring-brand-600"
                   }`}
                 >
-                  <span className={active ? "text-brand-100" : "text-slate-500"}>{d.weekday}</span>
-                  <span className="text-lg font-semibold">{d.day}</span>
-                  <span className={active ? "text-brand-100" : "text-slate-500"}>{d.month}</span>
+                  <span className={active ? "text-brand-400" : "text-slate-500"}>{d.weekday}</span>
+                  <span className="font-display text-xl font-extrabold">{d.day}</span>
+                  <span className={active ? "text-brand-400" : "text-slate-500"}>{d.month}</span>
                 </button>
               );
             })}
           </div>
 
-          <h2 className="mt-6 font-medium text-slate-900">
+          <h2 className="mt-6 text-lg font-extrabold text-slate-900">
             {longDate(byDay.get(selectedDay)![0].start, { withYear: false, lang, tz })}
           </h2>
           <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -120,7 +120,7 @@ export function SlotPicker({
                   key={s.start}
                   onClick={() => onPick(s)}
                   aria-label={paris ? `${local} (${paris})` : undefined}
-                  className="rounded-xl bg-white py-3 text-sm font-semibold text-brand-700 ring-1 ring-slate-200 transition hover:bg-brand-50 hover:ring-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                  className="rounded bg-white py-3 text-sm font-bold text-brand-700 ring-1 ring-slate-300 transition hover:bg-brand-50 hover:ring-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                 >
                   {local}
                   {paris && <span className="block text-xs font-normal text-slate-500">{paris}</span>}

@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { api, ApiError, type FirefliesStatus } from "../../api";
 import { Alert, Button } from "../../components/Layout";
+import { SectionTitle } from "../../components/Icon";
 import { Badge } from "./CodexConnection";
 
 /**
@@ -51,10 +52,10 @@ export function FirefliesConnection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-slate-900">Connexion Fireflies</h2>
+      <SectionTitle icon="mic">Connexion Fireflies</SectionTitle>
       <div className="mt-3 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 text-sm">
         <div className="max-w-2xl space-y-1">
-          <h3 className="text-base font-semibold text-slate-900">Récupérer les transcriptions des séances</h3>
+          <h3 className="text-base font-bold text-slate-900">Récupérer les transcriptions des séances</h3>
           <p className="text-slate-500">
             Fireflies enregistre vos séances Google Meet. Après chaque séance, l’application récupère la transcription
             et la confie à l’agent Codex, qui rédige la synthèse. La clé API est vérifiée auprès de Fireflies, conservée
@@ -112,7 +113,7 @@ export function FirefliesConnection() {
                   onChange={(e) => setKey(e.target.value)}
                   maxLength={512}
                   required
-                  className="block min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 font-mono focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+                  className="block min-w-0 flex-1 rounded border-[1.5px] border-slate-300 bg-white px-3.5 py-2.5 transition-colors hover:border-slate-500 font-mono focus:border-brand-600 focus:outline-none focus:ring-3 focus:ring-brand-600/20"
                 />
                 <Button type="submit" disabled={busy || !key.trim()}>
                   {busy ? "Vérification…" : "Connecter Fireflies"}

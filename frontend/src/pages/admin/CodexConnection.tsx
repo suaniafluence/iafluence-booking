@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type CodexLogin, type CodexStatus } from "../../api";
 import { CopyButton } from "../../components/CopyButton";
 import { Alert, Button } from "../../components/Layout";
+import { SectionTitle } from "../../components/Icon";
 import { hm } from "../../format";
 
 /** Status check of a pending device login (the backend also asks the codex app-server). */
@@ -103,11 +104,11 @@ export function CodexConnection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-slate-900">Connexion Codex</h2>
+      <SectionTitle icon="bot">Connexion Codex</SectionTitle>
       <div className="mt-3 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 text-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl space-y-1">
-            <h3 className="text-base font-semibold text-slate-900">Associer votre compte ChatGPT</h3>
+            <h3 className="text-base font-bold text-slate-900">Associer votre compte ChatGPT</h3>
             <p className="text-slate-500">
               Les comptes rendus sont rédigés par votre agent Codex avec votre forfait ChatGPT. Aucun mot de passe ni
               jeton ne passe par cette page : vous validez la connexion sur le site d’OpenAI avec un code à usage
@@ -138,7 +139,7 @@ export function Badge({ tone, children }: { tone: "ok" | "warn" | "off"; childre
     warn: "bg-amber-50 text-amber-800 ring-amber-200",
     off: "bg-slate-100 text-slate-600 ring-slate-200",
   }[tone];
-  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${styles}`}>{children}</span>;
+  return <span className={`rounded-sm px-2.5 py-0.5 text-xs font-semibold ${styles}`}>{children}</span>;
 }
 
 function State({

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, type AdminOverview, type NewClient } from "../api";
 import { CopyButton } from "../components/CopyButton";
+import { SectionTitle } from "../components/Icon";
 import { Alert, Button, Card, Layout, Spinner } from "../components/Layout";
 import { euros, hm, hours, longDate } from "../format";
 import { CalendarPrint } from "./admin/CalendarPrint";
@@ -31,9 +32,12 @@ export default function Admin() {
   return (
     <Layout wide>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Tableau de bord</h1>
+        <h1 className="text-[32px] font-extrabold leading-none text-slate-900">
+          Tableau de <span className="hl">bord</span>
+        </h1>
         <Button
           variant="secondary"
+          className="min-h-10 px-4 text-sm"
           onClick={() =>
             api
               .adminLogout()
@@ -77,16 +81,16 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
   return (
     <Layout>
       <Card className="mx-auto max-w-sm">
-        <h1 className="text-xl font-semibold text-slate-900">Administration</h1>
+        <h1 className="text-2xl font-extrabold text-slate-900">Administration</h1>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <label className="block text-sm">
-            <span className="text-slate-600">Mot de passe</span>
+            <span className="font-semibold text-slate-900">Mot de passe</span>
             <input
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+              className={field}
               required
             />
           </label>
@@ -100,12 +104,16 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Kpi({ label, value, hint, dark = false }: { label: string; value: string; hint?: string; dark?: boolean }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="text-sm text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-slate-900 tabular-nums">{value}</div>
-      {hint && <div className="mt-1 text-xs text-slate-400">{hint}</div>}
+    <div
+      className={`flex flex-col gap-1 rounded border p-[18px] ${
+        dark ? "border-brand-900 bg-brand-900 text-white" : "border-slate-200 bg-white text-slate-900"
+      }`}
+    >
+      <div className={`text-[13px] ${dark ? "text-slate-300" : "text-slate-500"}`}>{label}</div>
+      <div className="font-display text-[28px] font-extrabold leading-tight tabular-nums">{value}</div>
+      {hint && <div className={`text-xs ${dark ? "text-slate-300" : "text-slate-500"}`}>{hint}</div>}
     </div>
   );
 }
@@ -113,9 +121,9 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
 function Dashboard({ data, onChange }: { data: AdminOverview; onChange: () => void }) {
   const k = data.kpis;
   return (
-    <div className="mt-6 space-y-8">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <Kpi label="Paiements du mois" value={String(k.payments_this_month)} hint={euros(k.revenue_this_month_cents)} />
+    <div className="mt-8 space-y-10">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Kpi dark label="Paiements du mois" value={String(k.payments_this_month)} hint={euros(k.revenue_this_month_cents)} />
         <Kpi label="Heures vendues" value={hours(k.hours_sold)} />
         <Kpi label="Heures réalisées" value={hours(k.hours_done)} />
         <Kpi label="Heures restantes à délivrer" value={hours(k.hours_to_deliver)} />
@@ -179,14 +187,14 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
   return (
     <section>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900">Clients</h2>
+        <SectionTitle icon="users">Clients</SectionTitle>
         {!adding && (
-          <Button variant="secondary" onClick={() => setAdding(true)}>
+          <Button variant="secondary" className="min-h-10 px-4 text-sm" onClick={() => setAdding(true)}>
             Ajouter un client
           </Button>
         )}
       </div>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1.5 max-w-[80ch] text-sm text-slate-500">
         À la fin de chaque session, le lien pour réserver la suivante est envoyé automatiquement si « Envoi auto » est
         coché, sinon il est préparé en brouillon dans Gmail.
       </p>
@@ -213,7 +221,7 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
           <Alert>{error}</Alert>
         </div>
       )}
-      <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+      <div className="mt-3 overflow-x-auto rounded border border-slate-200 bg-white">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
@@ -227,17 +235,17 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
               <th className="px-5 py-3 font-medium">Lien</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-200">
             {clients.map((c) => (
               <tr key={c.purchase_id} className={c.payment_status === "refunded" ? "text-slate-400 line-through" : ""}>
                 <td className="px-5 py-3">
-                  <div className="font-medium text-slate-900">{c.name}</div>
+                  <div className="font-bold text-slate-900">{c.name}</div>
                   <div className="text-slate-500">{c.email}</div>
                 </td>
                 <td className="px-5 py-3">
                   {c.product}
                   {c.manual && (
-                    <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">manuel</span>
+                    <span className="ml-2 rounded-sm bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">manuel</span>
                   )}
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums">
@@ -250,10 +258,10 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
                         max={100}
                         value={editing.value}
                         onChange={(e) => setEditing({ purchaseId: c.purchase_id, value: e.target.value })}
-                        className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-right"
+                        className="w-16 rounded border-[1.5px] border-slate-300 px-2 py-1 text-right focus:border-brand-600 focus:outline-none"
                         required
                       />
-                      <button type="submit" className="font-medium text-brand-600 underline">
+                      <button type="submit" className="font-semibold text-brand-600 underline">
                         OK
                       </button>
                       <button
@@ -271,7 +279,7 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
                       <button
                         type="button"
                         aria-label={`Modifier les heures de ${c.name}`}
-                        className="ml-2 text-xs text-brand-600 underline"
+                        className="ml-2 text-xs font-semibold text-brand-600 underline"
                         onClick={() => setEditing({ purchaseId: c.purchase_id, value: String(c.hours_purchased) })}
                       >
                         Modifier
@@ -280,7 +288,7 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
                   )}
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums">{hours(c.hours_booked)}</td>
-                <td className="px-5 py-3 text-right font-semibold tabular-nums">{hours(c.hours_remaining)}</td>
+                <td className="px-5 py-3 text-right font-bold tabular-nums">{hours(c.hours_remaining)}</td>
                 <td className="px-5 py-3 text-slate-600">
                   {c.booking ? `${longDate(c.booking.start)} · ${hm(c.booking.start)}` : "—"}
                 </td>
@@ -291,7 +299,7 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
                     checked={autoSendShown[c.customer_id] ?? c.auto_send_next_link}
                     disabled={saving === c.customer_id}
                     onChange={(e) => setAutoSend(c, e.target.checked)}
-                    className="h-4 w-4 accent-brand-600"
+                    className="h-[18px] w-[18px] accent-brand-600"
                   />
                 </td>
                 <td className="px-5 py-3">{c.booking_url ? <CopyButton text={c.booking_url} /> : "—"}</td>
@@ -312,7 +320,7 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
 }
 
 const field =
-  "mt-1 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600";
+  "mt-1.5 block min-h-12 w-full rounded border-[1.5px] border-slate-300 bg-white px-3.5 py-2.5 text-base text-slate-900 transition-colors hover:border-slate-500 focus:border-brand-600 focus:outline-none focus:ring-3 focus:ring-brand-600/20";
 
 function AddClient({ onCancel, onAdded }: { onCancel: () => void; onAdded: (bookingUrl: string) => void }) {
   const [form, setForm] = useState({ name: "", email: "", hours: "1", product: "Conseil IA", amount: "", send: true });
@@ -342,21 +350,21 @@ function AddClient({ onCancel, onAdded }: { onCancel: () => void; onAdded: (book
   };
 
   return (
-    <form onSubmit={submit} className="mt-4 grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:grid-cols-2">
+    <form onSubmit={submit} className="mt-4 grid gap-4 rounded border border-slate-200 bg-white p-6 sm:grid-cols-2">
       <label className="block text-sm">
-        <span className="text-slate-600">Nom</span>
+        <span className="font-semibold text-slate-900">Nom</span>
         <input value={form.name} onChange={set("name")} className={field} required maxLength={255} />
       </label>
       <label className="block text-sm">
-        <span className="text-slate-600">Email</span>
+        <span className="font-semibold text-slate-900">Email</span>
         <input type="email" value={form.email} onChange={set("email")} className={field} required />
       </label>
       <label className="block text-sm">
-        <span className="text-slate-600">Heures achetées</span>
+        <span className="font-semibold text-slate-900">Heures achetées</span>
         <input type="number" min={1} max={100} value={form.hours} onChange={set("hours")} className={field} required />
       </label>
       <label className="block text-sm">
-        <span className="text-slate-600">Montant payé (€)</span>
+        <span className="font-semibold text-slate-900">Montant payé (€)</span>
         <input
           inputMode="decimal"
           pattern="[0-9]+([.,][0-9]{1,2})?"
@@ -367,11 +375,11 @@ function AddClient({ onCancel, onAdded }: { onCancel: () => void; onAdded: (book
         />
       </label>
       <label className="block text-sm sm:col-span-2">
-        <span className="text-slate-600">Prestation</span>
+        <span className="font-semibold text-slate-900">Prestation</span>
         <input value={form.product} onChange={set("product")} className={field} required maxLength={255} />
       </label>
       <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
-        <input type="checkbox" checked={form.send} onChange={set("send")} className="h-4 w-4 accent-brand-600" />
+        <input type="checkbox" checked={form.send} onChange={set("send")} className="h-[18px] w-[18px] accent-brand-600" />
         Envoyer le lien de réservation par email
       </label>
       {error && (
@@ -429,7 +437,7 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-slate-900">Prochains rendez-vous</h2>
+      <SectionTitle icon="calendar-check">Prochains rendez-vous</SectionTitle>
       {done && (
         <div className="mt-3">
           <Alert tone="info">{done}</Alert>
@@ -438,15 +446,15 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
       {upcoming.length === 0 ? (
         <p className="mt-2 text-sm text-slate-500">Aucun rendez-vous à venir.</p>
       ) : (
-        <ul className="mt-3 divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">
+        <ul className="mt-3 divide-y divide-slate-200 rounded border border-slate-200 bg-white">
           {upcoming.map((b) => (
             <li key={b.booking_id} className="px-5 py-4 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <div className="font-medium text-slate-900">
+                  <div className="font-bold text-slate-900">
                     {b.customer}
                     {b.kind === "discovery" && (
-                      <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
+                      <span className="ml-2 rounded-sm bg-brand-900 px-2 py-0.5 text-xs font-semibold text-brand-400">
                         Appel découverte
                       </span>
                     )}
@@ -460,7 +468,7 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
                     {b.meet_url && (
                       <>
                         {" · "}
-                        <a className="text-brand-600 underline" href={b.meet_url} target="_blank" rel="noreferrer">
+                        <a className="font-semibold text-brand-600 underline" href={b.meet_url} target="_blank" rel="noreferrer">
                           Meet
                         </a>
                       </>
@@ -471,7 +479,7 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
                         <button
                           type="button"
                           aria-label={`Annuler ${b.kind === "discovery" ? "l’appel découverte" : "la séance"} de ${b.customer}`}
-                          className="text-red-700 underline"
+                          className="font-semibold text-red-700 underline"
                           onClick={() => open(b)}
                         >
                           Annuler
@@ -482,7 +490,7 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
                 </div>
               </div>
               {cancelling === b.booking_id && (
-                <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-4">
+                <div className="mt-3 space-y-3 rounded bg-slate-50 p-4">
                   {b.kind === "discovery" ? (
                     <p className="text-slate-700">
                       Annuler cet appel découverte ? L’événement Google Agenda est supprimé et Google prévient le prospect.
@@ -497,7 +505,7 @@ function Upcoming({ upcoming, onChange }: { upcoming: UpcomingRow[]; onChange: (
                           type="checkbox"
                           checked={notify}
                           onChange={(e) => setNotify(e.target.checked)}
-                          className="h-4 w-4 accent-brand-600"
+                          className="h-[18px] w-[18px] accent-brand-600"
                         />
                         Envoyer au client son lien pour choisir un autre créneau
                       </label>

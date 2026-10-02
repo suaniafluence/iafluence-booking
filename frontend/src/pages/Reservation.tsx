@@ -43,7 +43,7 @@ export default function Reservation() {
     return (
       <Layout>
         <Card>
-          <h1 className="text-xl font-semibold text-slate-900">{t.booking.unavailableTitle}</h1>
+          <h1 className="text-xl font-extrabold text-slate-900">{t.booking.unavailableTitle}</h1>
           <div className="mt-4">
             <Alert>{errorText(t, loadError)}</Alert>
           </div>
@@ -108,7 +108,7 @@ function Welcome({ ctx, onNext }: { ctx: BookingContext; onNext: () => void }) {
   if (p.hours_remaining === 0) {
     return (
       <Card>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.allUsed.title}</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{t.allUsed.title}</h1>
         <p className="mt-4 text-slate-600">
           {t.allUsed.body(
             <a className="text-brand-600 underline" href="https://iafluence.fr">
@@ -132,7 +132,7 @@ function Welcome({ ctx, onNext }: { ctx: BookingContext; onNext: () => void }) {
   return (
     <Card>
       <p className="text-sm font-medium text-brand-600">{next ? t.welcome.nextKicker : t.welcome.kicker}</p>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+      <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
         {next ? t.welcome.nextTitle : t.welcome.title}
       </h1>
       <div className="mt-4 space-y-2 text-slate-600">
@@ -200,8 +200,8 @@ function Confirm({
 
   return (
     <Card>
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.confirm.title}</h1>
-      <div className="mt-6 rounded-xl bg-brand-50 p-5 text-brand-900 ring-1 ring-brand-100">
+      <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{t.confirm.title}</h1>
+      <div className="mt-6 rounded bg-brand-50 p-5 text-brand-900">
         <When slot={slot} tz={tz} />
         <p className="mt-3 text-sm text-brand-700">{t.confirm.with(ctx.consultant_name)}</p>
       </div>
@@ -241,10 +241,10 @@ function Done({
   return (
     <Card>
       <div className="flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100 text-emerald-700" aria-hidden>
+        <span className="grid h-10 w-10 place-items-center rounded bg-emerald-100 text-emerald-700" aria-hidden>
           ✓
         </span>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.done.title}</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{t.done.title}</h1>
       </div>
       <div className="mt-6 rounded-xl bg-slate-50 p-5 text-slate-800">
         <When slot={booking} tz={tz} suffix={` · ${t.confirm.with(ctx.consultant_name)}`} />

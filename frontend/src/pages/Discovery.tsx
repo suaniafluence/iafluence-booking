@@ -30,7 +30,7 @@ export default function Discovery() {
     return (
       <Layout>
         <Card>
-          <h1 className="text-xl font-semibold text-slate-900">{t.discovery.kicker}</h1>
+          <h1 className="text-xl font-extrabold text-slate-900">{t.discovery.kicker}</h1>
           <div className="mt-4">
             <Alert>{errorText(t, loadError)}</Alert>
           </div>
@@ -53,7 +53,7 @@ export default function Discovery() {
         <div className="space-y-6">
           <div>
             <p className="text-sm font-medium text-brand-600">{t.discovery.kicker}</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+            <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
               {t.discovery.title(min)}
             </h1>
             <p className="mt-3 text-slate-600">{t.discovery.intro}</p>
@@ -83,10 +83,10 @@ export default function Discovery() {
       {step.kind === "done" && (
         <Card>
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100 text-emerald-700" aria-hidden>
+            <span className="grid h-10 w-10 place-items-center rounded bg-emerald-100 text-emerald-700" aria-hidden>
               ✓
             </span>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.discovery.doneTitle}</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{t.discovery.doneTitle}</h1>
           </div>
           <div className="mt-6 rounded-xl bg-slate-50 p-5 text-slate-800">
             <When slot={step.booking} tz={tz} suffix={` · ${t.discovery.with(info.consultant_name)}`} />
@@ -156,11 +156,11 @@ function Details({
   };
 
   const field =
-    "mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600";
+    "mt-1 w-full rounded border-[1.5px] border-slate-300 bg-white px-3.5 py-2.5 transition-colors hover:border-slate-500 text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-3 focus:ring-brand-600/20";
   return (
     <Card>
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t.confirm.title}</h1>
-      <div className="mt-6 rounded-xl bg-brand-50 p-5 text-brand-900 ring-1 ring-brand-100">
+      <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{t.confirm.title}</h1>
+      <div className="mt-6 rounded bg-brand-50 p-5 text-brand-900">
         <When slot={slot} tz={tz} />
         <p className="mt-3 text-sm text-brand-700">{t.discovery.with(info.consultant_name)}</p>
       </div>

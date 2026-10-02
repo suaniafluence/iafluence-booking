@@ -9,6 +9,7 @@ import {
   type Synthese,
 } from "../../api";
 import { Alert } from "../../components/Layout";
+import { SectionTitle } from "../../components/Icon";
 import { hm, longDate } from "../../format";
 import { OtherMeetings } from "./OtherMeetings";
 
@@ -100,7 +101,7 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-slate-900">Comptes rendus de séance</h2>
+      <SectionTitle icon="notebook-pen">Comptes rendus de séance</SectionTitle>
       <p className="mt-1 text-sm text-slate-500">
         {reports.enabled
           ? "À la fin de chaque séance ou appel découverte, la transcription Fireflies est résumée par votre agent Codex, puis l’email au client est préparé en brouillon dans Gmail avec la synthèse et l’infographie."
@@ -154,10 +155,10 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
               <li key={s.booking_id} className="px-5 py-4 text-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="font-medium text-slate-900">
+                    <div className="font-bold text-slate-900">
                       {s.customer}
                       {s.kind !== "session" && (
-                        <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                        <span className="ml-2 rounded-sm bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                           {s.kind === "discovery" ? "Appel découverte" : "Réunion"}
                         </span>
                       )}
@@ -166,7 +167,7 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                       {longDate(s.start)} · {hm(s.start)} · {s.product}
                     </div>
                   </div>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${TONES[tone]}`}>{label}</span>
+                  <span className={`rounded-sm px-2.5 py-0.5 text-xs font-semibold ${TONES[tone]}`}>{label}</span>
                 </div>
                 {info && <p className="mt-1 text-xs text-slate-500">{info}</p>}
                 {r?.error && <p className="mt-1 text-xs text-red-700">{r.error}</p>}
@@ -260,7 +261,7 @@ function Preview({ session, report }: { session: FinishedSession; report: Sessio
         <div className="space-y-3">
           {SECTIONS.filter(([key]) => report.synthese![key].length > 0).map(([key, title]) => (
             <div key={key}>
-              <h3 className="font-semibold text-brand-700">{title}</h3>
+              <h3 className="font-bold text-brand-700">{title}</h3>
               <ul className="mt-1 list-disc space-y-0.5 pl-5 text-slate-700">
                 {report.synthese![key].map((item, i) => (
                   <li key={i}>{item}</li>

@@ -32,7 +32,7 @@ export function OtherMeetings({ onCreated }: { onCreated: (message: string) => v
 
   return (
     <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="font-semibold text-slate-900">Autres réunions</h3>
+      <h3 className="font-bold text-slate-900">Autres réunions</h3>
       <p className="mt-1 text-sm text-slate-500">
         Une réunion prise en dehors du site (invitation Google Agenda, appel…) et enregistrée par Fireflies : choisissez-la
         pour en faire le compte rendu. L’email est toujours préparé en brouillon, à relire avant l’envoi.
@@ -54,14 +54,14 @@ export function OtherMeetings({ onCreated }: { onCreated: (message: string) => v
             <li key={m.transcript_id} className="py-3 text-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="font-medium text-slate-900">{m.title ?? "Réunion sans titre"}</div>
+                  <div className="font-bold text-slate-900">{m.title ?? "Réunion sans titre"}</div>
                   <div className="text-slate-500">
                     {longDate(m.start)} · {hm(m.start)} - {hm(m.end)}
                   </div>
                   {m.participants.length > 0 && <div className="text-xs text-slate-500">{m.participants.join(", ")}</div>}
                 </div>
                 {m.report_id !== null ? (
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                  <span className="rounded-sm bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
                     Compte rendu déjà demandé
                   </span>
                 ) : (
