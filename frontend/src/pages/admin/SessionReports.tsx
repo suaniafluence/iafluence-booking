@@ -33,6 +33,7 @@ export function reportLabel(report: SessionReport | null): [string, Tone] {
     case "failed":
       return ["Échec", "fail"];
     case "drafted": {
+      if (report.delivery === "failed") return ["Échec Gmail", "fail"];
       const what = report.delivery === "sent" ? "Envoyé" : "Brouillon créé";
       return [`${what} ${report.with_summary ? "avec" : "sans"} compte rendu`, report.with_summary ? "ok" : "off"];
     }
@@ -53,8 +54,10 @@ function details(r: SessionReport): string | null {
     parts.push(`abandon à ${hm(r.waiting_until)}`);
     return parts.join(" · ");
   }
-  if (r.status === "drafted" && r.drafted_at)
-    return `Préparé le ${longDate(r.drafted_at).toLowerCase()} à ${hm(r.drafted_at)}`;
+  if (r.status === "drafted" && r.drafted_at) {
+    const when = `${longDate(r.drafted_at).toLowerCase()} à ${hm(r.drafted_at)}`;
+    return r.delivery === "failed" ? `Tentative le ${when}` : `Préparé le ${when}`;
+  }
   if (r.summary_attempts > 0 && r.status !== "summarizing") return `${r.summary_attempts} tentative(s) de résumé`;
   return null;
 }
@@ -136,6 +139,7 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
             const info = r && details(r);
             const idle = r !== null && (r.status === "waiting_transcript" || r.status === "failed");
             const previewable = r !== null && (r.synthese !== null || r.has_image);
+            const gmailFailed = r !== null && r.status === "drafted" && r.delivery === "failed";
             return (
               <li key={s.booking_id} className="px-5 py-4 text-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -152,7 +156,7 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                 {r?.erased && (
                   <p className="mt-1 text-xs text-slate-500">Compte rendu effacé (durée de conservation écoulée).</p>
                 )}
-                {(previewable || idle) && (
+                {(previewable || idle || gmailFailed) && (
                   <div className="mt-2 flex flex-wrap gap-4">
                     {previewable && (
                       <button
@@ -198,6 +202,18 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                           Créer le brouillon sans résumé
                         </button>
                       </>
+                    )}
+                    {gmailFailed && (
+                      <button
+                        type="button"
+                        disabled={busy === r.id}
+                        className="font-medium text-brand-600 underline disabled:text-slate-400"
+                        onClick={() =>
+                          act(s, () => api.adminRetryReportEmail(r.id), `Email de ${s.customer} renvoyé à Gmail.`)
+                        }
+                      >
+                        Recréer l’email
+                      </button>
                     )}
                   </div>
                 )}

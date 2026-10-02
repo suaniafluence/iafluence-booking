@@ -5,6 +5,8 @@
                    \\             -> failed (Codex not connected, invalid output twice…) + admin alert
                     -> drafted without summary after FIREFLIES_MAX_WAIT_HOURS + admin alert
 
+A drafted report whose email Gmail refused has delivery "failed": the admin can prepare it again (retry_email).
+
 The end-of-session job (follow_up) creates the report instead of the V1 email. `process` then runs every minute:
 - one Fireflies request lists the recordings of every due session (quota-friendly), matched on the start time
   (± 15 min) and the client email among the participants, or the Meet link;
@@ -51,6 +53,7 @@ SUBJECT_NEXT_V1 = text("fr", "subject_next_link")
 SUBJECT_LAST_V1 = text("fr", "subject_last_thanks")
 ALERT_SUBJECT = "COMPTE RENDU — action requise"
 RETRY_HINT = "Cliquez sur « Relancer » dans l'admin, ou sur « Créer le brouillon sans résumé »."
+GMAIL_FAILED = "L'email n'a pas pu être préparé dans Gmail (voir les logs de l'API)."
 
 
 @dataclass
@@ -174,7 +177,7 @@ def compose(db: Session, report: SessionReport, now: datetime, *, with_summary: 
 
 
 def deliver(mailer: Mailer, email: Email) -> None:
-    """After the commit. A failure is logged by send_safely and shown on the report."""
+    """After the commit. A failure is logged by send_safely and shown on the report, which can then be retried."""
     ok = send_safely(
         mailer, email.to, email.subject, email.body, as_draft=email.as_draft, html=email.html, images=email.images
     )
@@ -183,7 +186,7 @@ def deliver(mailer: Mailer, email: Email) -> None:
             db.execute(
                 update(SessionReport)
                 .where(SessionReport.id == email.report_id)
-                .values(error="L'email n'a pas pu être préparé dans Gmail (voir les logs de l'API).")
+                .values(delivery="failed", error=GMAIL_FAILED)
             )
             db.commit()
 
@@ -512,6 +515,19 @@ def draft_without_summary(db: Session, report_id: int, now: datetime) -> Email |
     report = _locked(db, report_id)
     _ensure_idle(report, now)
     email = compose(db, report, now, with_summary=False, force_draft=True)
+    db.commit()
+    if email is None:
+        raise ReportActionError(report.error, 409)
+    return email
+
+
+def retry_email(db: Session, report_id: int, now: datetime) -> Email | None:
+    """« Recréer l'email » after a Gmail failure: the same email, prepared again with the current rules."""
+    report = _locked(db, report_id)
+    if report.status != "drafted" or report.delivery != "failed":
+        raise ReportActionError("Cet email n'a pas échoué : rien à recréer.")
+    report.error = None
+    email = compose(db, report, now, with_summary=bool(report.with_summary))
     db.commit()
     if email is None:
         raise ReportActionError(report.error, 409)

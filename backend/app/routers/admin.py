@@ -319,6 +319,20 @@ def draft_without_summary(
     return {"id": report_id, "status": "drafted"}
 
 
+@router.post("/reports/{report_id}/retry-email", dependencies=[Depends(require_admin)])
+def retry_report_email(
+    report_id: int,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    mailer=Depends(get_mailer),
+    now: datetime = Depends(get_now),
+):
+    """« Recréer l'email » : Gmail refused the draft (or the email) of this report."""
+    email = _report_action(lambda: session_reports.retry_email(db, report_id, now))
+    background.add_task(session_reports.deliver, mailer, email)
+    return {"id": report_id, "status": "drafted"}
+
+
 @router.patch("/report-settings", dependencies=[Depends(require_admin)])
 def update_report_settings(body: ReportSettingsIn, db: Session = Depends(get_db)):
     """« Envoyer aussi les résumés sans relecture » for the clients on « Envoi auto »."""

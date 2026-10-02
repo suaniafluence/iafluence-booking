@@ -136,6 +136,8 @@ describe("api", () => {
     expect(last()).toEqual(["/api/admin/reports/7/retry", expect.objectContaining({ method: "POST" })]);
     await api.adminDraftWithoutSummary(7);
     expect(last()).toEqual(["/api/admin/reports/7/draft-without-summary", expect.objectContaining({ method: "POST" })]);
+    await api.adminRetryReportEmail(7);
+    expect(last()).toEqual(["/api/admin/reports/7/retry-email", expect.objectContaining({ method: "POST" })]);
     await api.adminSetReportSettings(true);
     expect(last()).toEqual([
       "/api/admin/report-settings",
