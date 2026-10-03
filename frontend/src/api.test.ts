@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, ndaPdfUrl, reportImageUrl } from "./api";
+import { api, ApiError, googleSignInUrl, ndaPdfUrl, reportImageUrl } from "./api";
 
 function mockFetch(status: number, body: unknown, json = true) {
   const fn = vi.fn().mockResolvedValue({
@@ -29,7 +29,7 @@ describe("api", () => {
     await api.availability("a&b=c");
     expect(fetch).toHaveBeenLastCalledWith("/api/availability?token=a%26b%3Dc", expect.anything());
     await api.adminOverview();
-    expect(fetch).toHaveBeenLastCalledWith("/api/admin/overview", expect.anything());
+    expect(fetch).toHaveBeenLastCalledWith("/api/consultant/overview", expect.anything());
   });
 
   it("POST endpoints send a JSON body", async () => {
@@ -57,43 +57,43 @@ describe("api", () => {
     const client = { name: "C", email: "c@x.fr", hours: 2, product_name: "Conseil IA", amount_cents: 0, send_link: true };
     await api.adminAddClient(client);
     expect(fetch).toHaveBeenLastCalledWith(
-      "/api/admin/clients",
+      "/api/consultant/clients",
       expect.objectContaining({ method: "POST", body: JSON.stringify(client) }),
     );
     await api.adminCancelBooking(21, false);
     expect(fetch).toHaveBeenLastCalledWith(
-      "/api/admin/bookings/21/cancel",
+      "/api/consultant/bookings/21/cancel",
       expect.objectContaining({ method: "POST", body: '{"notify":false}' }),
     );
     await api.adminSetHours(3, 2);
     expect(fetch).toHaveBeenLastCalledWith(
-      "/api/admin/purchases/3",
+      "/api/consultant/purchases/3",
       expect.objectContaining({ method: "PATCH", body: '{"hours_purchased":2}' }),
     );
     await api.adminNda();
-    expect(fetch).toHaveBeenLastCalledWith("/api/admin/nda", expect.anything());
+    expect(fetch).toHaveBeenLastCalledWith("/api/consultant/nda", expect.anything());
     const pdf = new File(["%PDF-1.7"], "NDA signé.pdf", { type: "application/pdf" });
     await api.adminNdaUpload("en", pdf);
     expect(fetch).toHaveBeenLastCalledWith(
-      "/api/admin/nda/documents/en?filename=NDA%20sign%C3%A9.pdf",
+      "/api/consultant/nda/documents/en?filename=NDA%20sign%C3%A9.pdf",
       expect.objectContaining({ method: "PUT", body: pdf, headers: { "Content-Type": "application/pdf" } }),
     );
     await api.adminNdaDelete("es");
-    expect(fetch).toHaveBeenLastCalledWith("/api/admin/nda/documents/es", expect.objectContaining({ method: "DELETE" }));
+    expect(fetch).toHaveBeenLastCalledWith("/api/consultant/nda/documents/es", expect.objectContaining({ method: "DELETE" }));
     await api.adminNdaSend({ name: "Claire", email: "claire@example.com", locale: "fr" });
     expect(fetch).toHaveBeenLastCalledWith(
-      "/api/admin/nda/send",
+      "/api/consultant/nda/send",
       expect.objectContaining({ method: "POST", body: '{"name":"Claire","email":"claire@example.com","locale":"fr"}' }),
     );
     await api.adminNdaSigned(4, true);
     expect(fetch).toHaveBeenLastCalledWith(
-      "/api/admin/customers/4/nda",
+      "/api/consultant/customers/4/nda",
       expect.objectContaining({ method: "PATCH", body: '{"signed":true}' }),
     );
-    expect(ndaPdfUrl("fr")).toBe("/api/admin/nda/documents/fr.pdf");
+    expect(ndaPdfUrl("fr")).toBe("/api/consultant/nda/documents/fr.pdf");
     await api.adminSetAutoSend(7, true);
     expect(fetch).toHaveBeenLastCalledWith(
-      "/api/admin/customers/7",
+      "/api/consultant/customers/7",
       expect.objectContaining({ method: "PATCH", body: '{"auto_send_next_link":true}' }),
     );
   });
@@ -153,7 +153,7 @@ describe("api", () => {
     await api.bookDiscovery(call);
     expect(fetch).toHaveBeenLastCalledWith("/api/discovery", expect.objectContaining({ method: "POST", body: JSON.stringify(call) }));
     await api.adminMeetings();
-    expect(fetch).toHaveBeenLastCalledWith("/api/admin/meetings", expect.anything());
+    expect(fetch).toHaveBeenLastCalledWith("/api/consultant/meetings", expect.anything());
     const meeting = {
       transcript_id: "ff",
       title: null,
@@ -165,7 +165,7 @@ describe("api", () => {
     };
     await api.adminCreateMeetingReport(meeting);
     expect(fetch).toHaveBeenLastCalledWith(
-      "/api/admin/meetings",
+      "/api/consultant/meetings",
       expect.objectContaining({ method: "POST", body: JSON.stringify(meeting) }),
     );
   });
@@ -175,7 +175,7 @@ describe("api", () => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, blob: () => Promise.resolve(pdf) });
     vi.stubGlobal("fetch", fetch);
     await expect(api.adminCalendarPdf("2026-10-05", "2026-10-18")).resolves.toBe(pdf);
-    expect(fetch).toHaveBeenCalledWith("/api/admin/calendar.pdf?start=2026-10-05&end=2026-10-18", {
+    expect(fetch).toHaveBeenCalledWith("/api/consultant/calendar.pdf?start=2026-10-05&end=2026-10-18", {
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
     });
@@ -191,14 +191,14 @@ describe("api", () => {
     const fetch = mockFetch(200, {});
     const last = () => fetch.mock.lastCall as [string, RequestInit];
     await api.adminRetryReport(7);
-    expect(last()).toEqual(["/api/admin/reports/7/retry", expect.objectContaining({ method: "POST" })]);
+    expect(last()).toEqual(["/api/consultant/reports/7/retry", expect.objectContaining({ method: "POST" })]);
     await api.adminDraftWithoutSummary(7);
-    expect(last()).toEqual(["/api/admin/reports/7/draft-without-summary", expect.objectContaining({ method: "POST" })]);
+    expect(last()).toEqual(["/api/consultant/reports/7/draft-without-summary", expect.objectContaining({ method: "POST" })]);
     await api.adminRetryReportEmail(7);
-    expect(last()).toEqual(["/api/admin/reports/7/retry-email", expect.objectContaining({ method: "POST" })]);
+    expect(last()).toEqual(["/api/consultant/reports/7/retry-email", expect.objectContaining({ method: "POST" })]);
     await api.adminSetReportSettings(true);
     expect(last()).toEqual([
-      "/api/admin/report-settings",
+      "/api/consultant/report-settings",
       expect.objectContaining({ method: "PATCH", body: '{"send_without_review":true}' }),
     ]);
     await api.adminCodexStatus();
@@ -213,6 +213,39 @@ describe("api", () => {
     expect(last()).toEqual(["/api/admin/codex/login/3/cancel", expect.objectContaining({ method: "POST" })]);
     await api.adminCodexLogout();
     expect(last()).toEqual(["/api/admin/codex/logout", expect.objectContaining({ method: "POST" })]);
-    expect(reportImageUrl(12)).toBe("/api/admin/reports/12/image.png");
+    expect(reportImageUrl(12)).toBe("/api/consultant/reports/12/image.png");
+  });
+
+  it("V3: staff sign-in, accounts, settings and the cockpit", async () => {
+    const fetch = mockFetch(200, {});
+    const last = () => fetch.mock.calls.at(-1)!;
+    const call = async (promise: Promise<unknown>, url: string, method?: string, body?: unknown) => {
+      await promise;
+      expect(last()[0]).toBe(url);
+      expect(last()[1].method).toBe(method);
+      expect(last()[1].body).toBe(body === undefined ? undefined : JSON.stringify(body));
+    };
+    expect(googleSignInUrl("admin")).toBe("/api/auth/google/start?role=admin");
+    await call(api.authMethods(), "/api/auth/methods");
+    await call(api.authMe("consultant"), "/api/auth/me?role=consultant");
+    await call(api.authLogout("admin"), "/api/auth/logout?role=admin", "POST");
+    await call(api.adminUsers(), "/api/admin/users");
+    const user = { email: "a@b.fr", name: "A", is_admin: false, is_consultant: true };
+    await call(api.adminAddUser(user), "/api/admin/users", "POST", user);
+    await call(api.adminUpdateUser(3, { active: false }), "/api/admin/users/3", "PATCH", { active: false });
+    await call(api.adminSettings(), "/api/admin/settings");
+    await call(api.adminUpdateSettings({ hide_after_days: 90 }), "/api/admin/settings", "PATCH", { hide_after_days: 90 });
+    await call(api.learners(), "/api/consultant/learners");
+    await call(api.learners(true), "/api/consultant/learners?hidden=true");
+    await call(api.learner(4), "/api/consultant/learners/4");
+    await call(api.updateLearner(4, { notes: "n" }), "/api/consultant/learners/4", "PATCH", { notes: "n" });
+    await call(api.companySearch(4), "/api/consultant/learners/4/company/search");
+    await call(api.companySearch(4, "a&b"), "/api/consultant/learners/4/company/search?q=a%26b");
+    await call(api.companyAttach(4, "812345678"), "/api/consultant/learners/4/company", "PUT", { siren: "812345678" });
+    await call(api.companyDetach(4), "/api/consultant/learners/4/company", "DELETE");
+    await call(api.startResearch(4), "/api/consultant/learners/4/research", "POST");
+    await call(api.generatePlan(4), "/api/consultant/learners/4/plan", "POST");
+    await call(api.sendPlanMessage(4, "Plus court"), "/api/consultant/learners/4/plan/messages", "POST", { message: "Plus court" });
+    await call(api.validatePlan(4, true), "/api/consultant/learners/4/plan", "PATCH", { validated: true });
   });
 });

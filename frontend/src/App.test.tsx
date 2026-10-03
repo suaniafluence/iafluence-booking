@@ -97,14 +97,36 @@ describe("routing", () => {
     expect(screen.getByRole("link", { name: "English" })).toHaveAttribute("href", "/en/reservation?session_id=cs_1");
   });
 
-  it("/admin opens the dashboard, in French, without language switcher", () => {
+  it("/admin opens the configuration, in French, without language switcher", () => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-GB"]);
+    vi.spyOn(api, "authMe").mockReturnValue(new Promise(() => {}));
     renderAt("/admin");
-    expect(screen.getByRole("heading", { name: "Tableau de bord" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Administration" })).toBeInTheDocument();
+    expect(api.authMe).toHaveBeenCalledWith("admin");
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
   });
 
-  it.each(["/", "/nope", "/reservation/a/b", "/de/reservation/tok", "/fr/reservation/a/b"])(
+  it("/consultant opens the cockpit", () => {
+    renderAt("/consultant");
+    expect(screen.getByRole("heading", { name: "Cockpit consultant" })).toBeInTheDocument();
+  });
+
+  it("/consultant/apprenants/:id opens a learner", () => {
+    vi.spyOn(api, "learner").mockReturnValue(new Promise(() => {}));
+    renderAt("/consultant/apprenants/7");
+    expect(api.learner).toHaveBeenCalledWith(7);
+    expect(screen.getByRole("link", { name: "← Cockpit" })).toHaveAttribute("href", "/consultant");
+  });
+
+  it("/ offers the two staff areas", async () => {
+    const user = userEvent.setup();
+    renderAt("/");
+    expect(screen.getByRole("link", { name: /Administration/ })).toHaveAttribute("href", "/admin");
+    await user.click(screen.getByRole("link", { name: /Espace consultant/ }));
+    expect(url()).toBe("/consultant");
+  });
+
+  it.each(["/nope", "/reservation/a/b", "/de/reservation/tok", "/fr/reservation/a/b"])(
     "%s is a 404 page pointing to the website",
     (path) => {
       renderAt(path);

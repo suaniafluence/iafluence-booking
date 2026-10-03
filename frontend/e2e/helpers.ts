@@ -83,11 +83,32 @@ print(json.dumps(out))
   );
 }
 
+/** Admin area (configuration), with the password fallback. */
 export async function adminLogin(page: Page) {
   await page.goto("/admin");
-  await page.getByLabel("Mot de passe").fill(ADMIN_PASSWORD);
+  await page.getByLabel("Mot de passe de secours").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Se connecter" }).click();
-  await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Comptes et rôles" })).toBeVisible();
+}
+
+/** Consultant cockpit: « Google » signs in at once in demo mode, as the seeded staff account. */
+export async function consultantLogin(page: Page) {
+  await page.goto("/consultant");
+  await page.getByRole("link", { name: "Se connecter avec Google" }).click();
+  await expect(page.getByRole("heading", { name: "Cockpit consultant" })).toBeVisible();
+}
+
+/** Codex must be connected (admin area) for reports, plans and research. */
+export async function connectCodex(page: Page) {
+  await adminLogin(page);
+  const codex = page.locator("section").filter({ has: page.getByRole("heading", { name: "Connexion Codex" }) });
+  // Wait for the status before deciding (it loads after the page).
+  await expect(codex.getByRole("button", { name: /Connecter Codex|Déconnecter/ }).first()).toBeVisible();
+  if (await codex.getByRole("button", { name: /Connecter Codex/ }).isVisible()) {
+    await codex.getByRole("button", { name: /Connecter Codex/ }).click();
+    await expect(codex.getByText("Connecté", { exact: true })).toBeVisible({ timeout: 15_000 });
+  }
+  return codex;
 }
 
 /** Books the first free slot for a new demo customer through the public API; returns the customer id. */

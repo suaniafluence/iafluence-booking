@@ -4,8 +4,11 @@ import { api } from "./api";
 import { Layout, Spinner } from "./components/Layout";
 import { browserLang, isLang, LangProvider, useI18n } from "./i18n";
 import Admin from "./pages/Admin";
+import Cockpit from "./pages/Cockpit";
+import LearnerPage from "./pages/consultant/LearnerPage";
 import CheckoutRedirect from "./pages/CheckoutRedirect";
 import Discovery from "./pages/Discovery";
+import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
 import Reservation from "./pages/Reservation";
 
@@ -21,7 +24,11 @@ export default function App() {
       <Route path="/reservation" element={<LangProvider lang={browserLang()}><CheckoutRedirect /></LangProvider>} />
       {/* Booking links emailed before the site was multilingual. */}
       <Route path="/reservation/:token" element={<LangProvider lang={browserLang()}><LegacyBookingLink /></LangProvider>} />
+      {/* Staff: the two areas, from the base URL. */}
+      <Route path="/" element={<Home />} />
       <Route path="/admin" element={<Admin />} />
+      <Route path="/consultant" element={<Cockpit />} />
+      <Route path="/consultant/apprenants/:id" element={<LearnerPage />} />
       <Route path="*" element={<LangProvider lang={browserLang()}><NotFound /></LangProvider>} />
     </Routes>
   );
