@@ -124,7 +124,7 @@ describe("routing", () => {
   });
 
   it("/en/decouverte opens the free discovery call page", async () => {
-    vi.spyOn(api, "discoveryInfo").mockResolvedValue({ consultant_name: "Suan", timezone: "Europe/Paris", duration_min: 30 });
+    vi.spyOn(api, "discoveryInfo").mockResolvedValue({ consultant_name: "Suan", timezone: "Europe/Paris", duration_min: 30, nda_available: false });
     vi.spyOn(api, "discoveryAvailability").mockResolvedValue({ slots: [] });
     renderAt("/en/decouverte");
     expect(await screen.findByRole("heading", { name: "Let’s talk about your AI projects in 30 minutes" })).toBeInTheDocument();

@@ -29,6 +29,10 @@ class Customer(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True)
     # End of session: send the next-session link directly, or leave it as a Gmail draft (default) to add notes.
     auto_send_next_link: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
+    # Confidentiality agreement (app.services.nda): emailed signed by the consultant, returned signed by the
+    # customer in reply (the admin ticks it off).
+    nda_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    nda_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     purchases: Mapped[list["Purchase"]] = relationship(back_populates="customer")
@@ -257,6 +261,21 @@ class Settings(Base):
     # Free discovery call (/decouverte): same weekly hours, notice and buffers as the sessions.
     discovery_enabled: Mapped[bool] = mapped_column(Boolean, server_default="true", default=True)
     discovery_duration_min: Mapped[int] = mapped_column(Integer, server_default="30", default=30)
+
+
+class NdaDocument(Base):
+    """The confidentiality agreement already signed by the consultant, one PDF per customer language.
+
+    French is the reference: a customer whose language has no PDF of its own receives it."""
+
+    __tablename__ = "nda_documents"
+
+    locale: Mapped[str] = mapped_column(String(5), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    pdf: Mapped[bytes] = mapped_column(LargeBinary)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (CheckConstraint("locale IN ('fr', 'en', 'es')", name="nda_locale"),)
 
 
 class AvailabilityRule(Base):

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, ApiError, type BookingContext, type BookingInfo, type Slot } from "../api";
 import { Alert, Button, Card, HoursSummary, Layout, Spinner } from "../components/Layout";
+import { NdaBox } from "../components/NdaBox";
 import { SlotPicker, When } from "../components/SlotPicker";
 import { clock, hours } from "../format";
 import { errorText, useI18n } from "../i18n";
@@ -10,7 +11,7 @@ type Step =
   | { kind: "welcome" }
   | { kind: "pick"; notice?: ApiError }
   | { kind: "confirm"; slot: Slot }
-  | { kind: "done"; booking: BookingInfo; hoursPurchased: number; hoursRemaining: number };
+  | { kind: "done"; booking: BookingInfo; hoursPurchased: number; hoursRemaining: number; nda?: boolean };
 
 export default function Reservation() {
   const { token = "" } = useParams();
@@ -79,12 +80,13 @@ export default function Reservation() {
           slot={step.slot}
           onBack={() => setStep({ kind: "pick" })}
           onTaken={(err) => setStep({ kind: "pick", notice: err })}
-          onDone={(b) =>
+          onDone={(b, nda) =>
             setStep({
               kind: "done",
               booking: b,
               hoursPurchased: b.hours_purchased,
               hoursRemaining: b.hours_remaining,
+              nda,
             })
           }
         />
@@ -96,6 +98,7 @@ export default function Reservation() {
           booking={step.booking}
           hoursPurchased={step.hoursPurchased}
           hoursRemaining={step.hoursRemaining}
+          nda={step.nda ?? false}
         />
       )}
     </Layout>
@@ -178,9 +181,10 @@ function Confirm({
   slot: Slot;
   onBack: () => void;
   onTaken: (err: ApiError) => void;
-  onDone: (b: Awaited<ReturnType<typeof api.book>>) => void;
+  onDone: (b: Awaited<ReturnType<typeof api.book>>, nda: boolean) => void;
 }) {
   const { lang, t } = useI18n();
+  const [nda, setNda] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -188,7 +192,7 @@ function Confirm({
     setBusy(true);
     setError(null);
     try {
-      onDone(await api.book(token, slot.start, lang, tz));
+      onDone(await api.book(token, slot.start, lang, tz, nda), nda);
     } catch (e) {
       const err = e as ApiError;
       if (err.code === "slot_taken" || err.code === "slot_invalid") onTaken(err);
@@ -207,6 +211,12 @@ function Confirm({
       </div>
       <p className="mt-4 text-sm text-slate-500">{t.confirm.sendTo(<strong>{ctx.customer.email}</strong>)}</p>
       <p className="mt-2 text-sm text-slate-500">{t.policy}</p>
+      {/* Before the first meeting: offered until this customer has received the agreement. */}
+      {ctx.nda_available && !ctx.nda_sent && (
+        <div className="mt-4">
+          <NdaBox consultant={ctx.consultant_name} checked={nda} onChange={setNda} disabled={busy} />
+        </div>
+      )}
       {error && (
         <div className="mt-4">
           <Alert>{errorText(t, error)}</Alert>
@@ -230,12 +240,14 @@ function Done({
   booking,
   hoursPurchased,
   hoursRemaining,
+  nda,
 }: {
   ctx: BookingContext;
   tz: string;
   booking: BookingInfo;
   hoursPurchased: number;
   hoursRemaining: number;
+  nda: boolean;
 }) {
   const { lang, t } = useI18n();
   return (
@@ -260,6 +272,7 @@ function Done({
         )}
       </div>
       <p className="mt-4 text-sm text-slate-600">{t.done.sent(<strong>{ctx.customer.email}</strong>)}</p>
+      {nda && <p className="mt-2 text-sm text-slate-600">{t.nda.sent}</p>}
       <div className="mt-6">
         <HoursSummary
           rows={[

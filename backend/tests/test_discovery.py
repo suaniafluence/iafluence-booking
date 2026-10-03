@@ -50,6 +50,7 @@ def test_info_gives_the_call_length(client):
         "consultant_name": "Suan Tay",
         "timezone": "Europe/Paris",
         "duration_min": 30,
+        "nda_available": False,
     }
 
 

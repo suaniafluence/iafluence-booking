@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { api, ApiError, type BookingInfo, type DiscoveryInfo, type Slot } from "../api";
 import { Alert, Button, Card, Layout, Spinner } from "../components/Layout";
+import { NdaBox } from "../components/NdaBox";
 import { SlotPicker, When } from "../components/SlotPicker";
 import { clock } from "../format";
 import { errorText, useI18n } from "../i18n";
@@ -8,7 +9,7 @@ import { errorText, useI18n } from "../i18n";
 type Step =
   | { kind: "pick"; notice?: ApiError }
   | { kind: "details"; slot: Slot }
-  | { kind: "done"; booking: BookingInfo; email: string };
+  | { kind: "done"; booking: BookingInfo; email: string; nda: boolean };
 
 /** Free discovery call, open to anyone (linked from iafluence.fr instead of the Google appointment page). */
 export default function Discovery() {
@@ -77,7 +78,7 @@ export default function Discovery() {
           slot={step.slot}
           onBack={() => setStep({ kind: "pick" })}
           onTaken={(err) => setStep({ kind: "pick", notice: err })}
-          onDone={(booking, email) => setStep({ kind: "done", booking, email })}
+          onDone={(booking, email, nda) => setStep({ kind: "done", booking, email, nda })}
         />
       )}
       {step.kind === "done" && (
@@ -102,6 +103,7 @@ export default function Discovery() {
             )}
           </div>
           <p className="mt-4 text-sm text-slate-600">{t.done.sent(<strong>{step.email}</strong>)}</p>
+          {step.nda && <p className="mt-2 text-sm text-slate-600">{t.nda.sent}</p>}
           <p className="mt-2 text-sm text-slate-500">{t.discovery.reschedule}</p>
         </Card>
       )}
@@ -122,12 +124,13 @@ function Details({
   slot: Slot;
   onBack: () => void;
   onTaken: (err: ApiError) => void;
-  onDone: (booking: BookingInfo, email: string) => void;
+  onDone: (booking: BookingInfo, email: string, nda: boolean) => void;
 }) {
   const { lang, t } = useI18n();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [nda, setNda] = useState(false);
   const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -144,9 +147,10 @@ function Details({
         message,
         locale: lang,
         timezone: tz,
+        nda,
         website,
       });
-      onDone(booking, email);
+      onDone(booking, email, nda);
     } catch (err) {
       const apiErr = err as ApiError;
       if (apiErr.code === "slot_taken" || apiErr.code === "slot_invalid") onTaken(apiErr);
@@ -204,6 +208,9 @@ function Details({
             <input tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
           </label>
         </div>
+        {info.nda_available && (
+          <NdaBox consultant={info.consultant_name} checked={nda} onChange={setNda} disabled={busy} />
+        )}
         <p className="text-xs text-slate-500">{t.discovery.privacy}</p>
         {error && <Alert>{errorText(t, error)}</Alert>}
         <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">

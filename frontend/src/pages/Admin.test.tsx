@@ -12,6 +12,7 @@ beforeEach(() => {
   vi.spyOn(api, "adminOverview").mockResolvedValue(overview());
   vi.spyOn(api, "adminCodexStatus").mockResolvedValue(codexStatus({ state: "connected", email: "suan@iafluence.fr" }));
   vi.spyOn(api, "adminFirefliesStatus").mockResolvedValue(firefliesStatus());
+  vi.spyOn(api, "adminNda").mockResolvedValue({ documents: [], customers: [] });
 });
 
 describe("Admin", () => {
@@ -48,7 +49,7 @@ describe("Admin", () => {
 
   it("lists clients, striking refunded purchases", async () => {
     render(<Admin />);
-    const rows = within(await screen.findByRole("table")).getAllByRole("row");
+    const rows = within((await screen.findAllByRole("table"))[0]).getAllByRole("row");
     expect(rows[0]).toHaveTextContent("ClientPrestationAchetéesRéservéesRestantesProchaine sessionEnvoi autoLien");
     const cells = (row: HTMLElement) => within(row).getAllByRole("cell").map((c) => c.textContent);
     expect(cells(rows[1])).toEqual([

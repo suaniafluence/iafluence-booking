@@ -22,3 +22,8 @@ Heures achetées :
 
 Heures restantes :
 {{ hours_remaining }}
+{% if nda %}
+
+NDA :
+Demandé par le client (envoyé automatiquement s'il ne l'avait pas déjà reçu). À son retour signé, cochez « Signé reçu » dans l'admin, section « Accord de confidentialité ».
+{% endif %}

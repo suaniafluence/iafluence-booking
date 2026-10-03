@@ -15,6 +15,9 @@ export type BookingContext = {
   timezone: string;
   booking_duration_min: number;
   locale: string;
+  /** Confidentiality agreement: its PDF is uploaded / this customer already received it. */
+  nda_available: boolean;
+  nda_sent: boolean;
 };
 
 export type BookingConfirmed = BookingInfo & {
@@ -64,11 +67,11 @@ export const api = {
   exchangeCheckout: (sessionId: string) => request<{ token: string; locale: string }>(`/api/checkout/${enc(sessionId)}`),
   context: (token: string) => request<BookingContext>(`/api/booking/${enc(token)}`),
   availability: (token: string) => request<{ slots: Slot[] }>(`/api/availability?token=${enc(token)}`),
-  /** `locale` and `timezone` (IANA, from the browser) drive the confirmation email. */
-  book: (token: string, start: string, locale: string, timezone: string) =>
+  /** `locale` and `timezone` (IANA, from the browser) drive the confirmation email; `nda` asks for the NDA. */
+  book: (token: string, start: string, locale: string, timezone: string, nda = false) =>
     request<BookingConfirmed>("/api/bookings", {
       method: "POST",
-      body: JSON.stringify({ token, start, locale, timezone }),
+      body: JSON.stringify({ token, start, locale, timezone, nda }),
     }),
   discoveryInfo: () => request<DiscoveryInfo>("/api/discovery"),
   discoveryAvailability: () => request<{ slots: Slot[] }>("/api/discovery/availability"),
@@ -130,9 +133,36 @@ export const api = {
       method: "POST",
       body: JSON.stringify(meeting),
     }),
+  adminNda: () => request<NdaOverview>("/api/admin/nda"),
+  /** The NDA already signed by the consultant, sent as the raw PDF. */
+  adminNdaUpload: (locale: string, file: File) =>
+    request<{ locale: string; filename: string; size: number }>(
+      `/api/admin/nda/documents/${enc(locale)}?filename=${enc(file.name)}`,
+      { method: "PUT", body: file, headers: { "Content-Type": "application/pdf" } },
+    ),
+  adminNdaDelete: (locale: string) =>
+    request<{ status: string }>(`/api/admin/nda/documents/${enc(locale)}`, { method: "DELETE" }),
+  adminNdaSend: (contact: { name: string; email: string; locale: string }) =>
+    request<{ customer_id: number; sent_at: string }>("/api/admin/nda/send", {
+      method: "POST",
+      body: JSON.stringify(contact),
+    }),
+  adminNdaSigned: (customerId: number, signed: boolean) =>
+    request<{ customer_id: number; signed_at: string | null }>(`/api/admin/customers/${customerId}/nda`, {
+      method: "PATCH",
+      body: JSON.stringify({ signed }),
+    }),
   /** « Imprimer mon calendrier » : PDF of every busy period from `start` to `end` (YYYY-MM-DD, both included). */
   adminCalendarPdf: async (start: string, end: string) =>
     (await send(`/api/admin/calendar.pdf?start=${enc(start)}&end=${enc(end)}`)).blob(),
+};
+
+/** Served to the logged-in admin only (session cookie on /api/admin). */
+export const ndaPdfUrl = (locale: string) => `/api/admin/nda/documents/${enc(locale)}.pdf`;
+
+export type NdaOverview = {
+  documents: { locale: string; filename: string; size: number; uploaded_at: string }[];
+  customers: { customer_id: number; name: string; email: string; sent_at: string; signed_at: string | null }[];
 };
 
 /** Served to the logged-in admin only (session cookie on /api/admin). */
@@ -247,7 +277,7 @@ export type AdminOverview = {
   reports: { enabled: boolean; send_without_review: boolean; sessions: FinishedSession[] };
 };
 
-export type DiscoveryInfo = { consultant_name: string; timezone: string; duration_min: number };
+export type DiscoveryInfo = { consultant_name: string; timezone: string; duration_min: number; nda_available: boolean };
 
 export type DiscoveryRequest = {
   name: string;
@@ -256,6 +286,8 @@ export type DiscoveryRequest = {
   message: string;
   locale: string;
   timezone: string;
+  /** Box ticked: email the NDA signed by the consultant. */
+  nda: boolean;
   website: string;
 };
 

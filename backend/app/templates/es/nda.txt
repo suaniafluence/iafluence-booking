@@ -1,0 +1,15 @@
+Hola, {{ name }}:
+
+Tal como acordamos, le adjunto nuestro acuerdo de confidencialidad (NDA), ya firmado por mi parte.
+
+Para completarlo:
+1. indique su nombre, su empresa y la fecha en los espacios previstos;
+2. fírmelo (basta con una firma electrónica o un escaneo);
+3. devuélvalo respondiendo a este correo.
+
+Todo lo que comparta durante nuestras conversaciones será estrictamente confidencial.
+
+Un cordial saludo,
+
+{{ consultant_name }}
+IAfluence

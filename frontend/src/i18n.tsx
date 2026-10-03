@@ -109,6 +109,12 @@ const fr = {
     doneTitle: "Appel découverte réservé",
     reschedule: "Un empêchement ? Répondez simplement à l’email de confirmation pour changer d’horaire.",
   },
+  nda: {
+    label: (name: string) =>
+      `Je souhaite recevoir par email un accord de confidentialité (NDA), déjà signé par ${name}, à renvoyer signé.`,
+    hint: "Utile si vous comptez partager des informations confidentielles sur votre activité.",
+    sent: "L’accord de confidentialité vous est envoyé par email : signez-le et renvoyez-le simplement en réponse.",
+  },
   notFound: {
     title: "Page introuvable",
     body: (site: ReactNode) => <>Utilisez le lien de réservation reçu après votre paiement, ou contactez-nous à {site}.</>,
@@ -221,6 +227,12 @@ const en: Messages = {
     doneTitle: "Discovery call booked",
     reschedule: "Can’t make it? Simply reply to the confirmation email to change the time.",
   },
+  nda: {
+    label: (name: string) =>
+      `I’d like to receive a non-disclosure agreement (NDA) by email, already signed by ${name}, to sign and send back.`,
+    hint: "Useful if you plan to share confidential information about your business.",
+    sent: "The non-disclosure agreement is on its way to your inbox: simply sign it and send it back by replying.",
+  },
   notFound: {
     title: "Page not found",
     body: (site: ReactNode) => <>Please use the booking link you received after your payment, or get in touch via {site}.</>,
@@ -330,6 +342,12 @@ const es: Messages = {
     submitting: "Reservando…",
     doneTitle: "Llamada de descubrimiento reservada",
     reschedule: "¿Le ha surgido un imprevisto? Basta con responder al correo de confirmación para cambiar la hora.",
+  },
+  nda: {
+    label: (name: string) =>
+      `Deseo recibir por correo un acuerdo de confidencialidad (NDA), ya firmado por ${name}, para devolverlo firmado.`,
+    hint: "Útil si piensa compartir información confidencial sobre su actividad.",
+    sent: "Le enviamos el acuerdo de confidencialidad por correo: basta con firmarlo y devolverlo respondiendo al mensaje.",
   },
   notFound: {
     title: "Página no encontrada",

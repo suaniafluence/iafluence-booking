@@ -1,0 +1,15 @@
+Hello {{ name }},
+
+As agreed, please find attached our non-disclosure agreement (NDA), already signed on my side.
+
+To complete it:
+1. fill in your name, company and the date where indicated;
+2. sign it (an electronic signature or a scan is fine);
+3. send it back by replying to this email.
+
+Everything you share during our conversations remains strictly confidential.
+
+Kind regards,
+
+{{ consultant_name }}
+IAfluence

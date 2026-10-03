@@ -197,7 +197,8 @@ describe("Reservation", () => {
     expect(screen.queryByText(/Heure de Paris/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Confirmer le rendez-vous" }));
-    expect(api.book).toHaveBeenCalledWith("tok123", "2026-10-09T09:00:00+02:00", "fr", "Europe/Paris");
+    expect(api.book).toHaveBeenCalledWith("tok123", "2026-10-09T09:00:00+02:00", "fr", "Europe/Paris", false);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirmation…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Changer de créneau" })).toBeDisabled();
 
@@ -216,6 +217,26 @@ describe("Reservation", () => {
       "Toute séance réservée est due. Vous pouvez la déplacer gratuitement jusqu’à 24 h avant son début en répondant " +
         "à l’email de confirmation ; passé ce délai, ou en cas d’absence, l’heure est considérée comme consommée.",
     );
+  });
+
+  it("offers the NDA before the first meeting and says it is on its way", async () => {
+    vi.mocked(api.context).mockResolvedValue(context({ nda_available: true }));
+    vi.spyOn(api, "book").mockResolvedValue(confirmed());
+    const user = await goToPicker();
+    await user.click(screen.getByRole("button", { name: "14:00" }));
+    await user.click(screen.getByRole("checkbox", { name: /accord de confidentialité \(NDA\), déjà signé par Suan Tay/ }));
+    await user.click(screen.getByRole("button", { name: "Confirmer le rendez-vous" }));
+    expect(api.book).toHaveBeenCalledWith("tok123", "2026-10-08T14:00:00+02:00", "fr", "Europe/Paris", true);
+    expect(await screen.findByRole("heading", { name: "Rendez-vous confirmé" })).toBeInTheDocument();
+    expect(screen.getByText(/L’accord de confidentialité vous est envoyé par email/)).toBeInTheDocument();
+  });
+
+  it("does not offer the NDA again once received", async () => {
+    vi.mocked(api.context).mockResolvedValue(context({ nda_available: true, nda_sent: true }));
+    const user = await goToPicker();
+    await user.click(screen.getByRole("button", { name: "14:00" }));
+    expect(screen.getByRole("heading", { name: "Votre rendez-vous" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
   it("goes back to the picker without booking", async () => {
@@ -326,7 +347,7 @@ describe("Reservation abroad", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Confirm appointment" }));
-    expect(api.book).toHaveBeenCalledWith("tok123", "2026-10-08T16:00:00+02:00", "en", "Australia/Sydney");
+    expect(api.book).toHaveBeenCalledWith("tok123", "2026-10-08T16:00:00+02:00", "en", "Australia/Sydney", false);
     expect(screen.getByRole("button", { name: "Confirming…" })).toBeDisabled();
 
     book.resolve(confirmed({ start: "2026-10-08T16:00:00+02:00", end: "2026-10-08T17:00:00+02:00" }));
@@ -359,7 +380,7 @@ describe("Reservation abroad", () => {
 
     await user.click(screen.getByRole("button", { name: "Confirmar la cita" }));
     expect(await screen.findByRole("heading", { name: "Cita confirmada" })).toBeInTheDocument();
-    expect(api.book).toHaveBeenCalledWith("tok123", "2026-10-09T09:00:00+02:00", "es", "America/Santiago");
+    expect(api.book).toHaveBeenCalledWith("tok123", "2026-10-09T09:00:00+02:00", "es", "America/Santiago", false);
     expect(summary()).toEqual({ "Horas contratadas": "5 h", "Horas programadas": "1 h", "Horas restantes": "4 h" });
   });
 

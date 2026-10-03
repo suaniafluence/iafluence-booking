@@ -18,6 +18,8 @@ export const context = (over: Partial<BookingContext> = {}): BookingContext => (
   timezone: "Europe/Paris",
   booking_duration_min: 60,
   locale: "fr",
+  nda_available: false,
+  nda_sent: false,
   ...over,
 });
 
