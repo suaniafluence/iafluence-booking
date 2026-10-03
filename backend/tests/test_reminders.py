@@ -166,7 +166,10 @@ def test_follow_up_loop_survives_a_reminder_failure(monkeypatch, caplog):
 
     async def main():
         task = asyncio.create_task(follow_up.run_forever(lambda: None, 0.01))
-        await asyncio.sleep(0.03)
+        for _ in range(500):
+            if "inactivity reminder job failed" in caplog.text:
+                break
+            await asyncio.sleep(0.01)
         task.cancel()
 
     asyncio.run(main())
