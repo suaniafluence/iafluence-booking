@@ -69,7 +69,7 @@ def _customer(db: Session, name: str, email: str) -> Customer:
     """Existing customers keep their name: anyone can type an email on a public form."""
     db.execute(
         pg_insert(Customer)
-        .values(name=name, email=email, consultant_id=default_consultant_id(db))
+        .values(name=name, email=email, consultant_id=default_consultant_id(db), acquisition_source="site")
         .on_conflict_do_nothing(index_elements=[Customer.email])
     )
     return db.scalar(select(Customer).where(Customer.email == email))

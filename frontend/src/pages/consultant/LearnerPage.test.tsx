@@ -119,9 +119,28 @@ describe("LearnerPage", () => {
     expect(screen.getByRole("link", { name: "← Cockpit" })).toHaveAttribute("href", "/consultant");
   });
 
+  it("changes how the learner came", async () => {
+    vi.spyOn(api, "updateLearner").mockResolvedValue({
+      customer_id: 7,
+      company_name: null,
+      notes: null,
+      acquisition_source: "autre",
+      acquisition_detail: "Salon",
+    });
+    const user = userEvent.setup();
+    show();
+    const select = await screen.findByLabelText("Comment ce client est arrivé");
+    expect(select).toHaveValue("whatsapp");
+    await user.selectOptions(select, "Autre");
+    await user.type(screen.getByLabelText("Précisez"), "Salon");
+    await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+    expect(api.updateLearner).toHaveBeenCalledWith(7, { acquisition_source: "autre", acquisition_detail: "Salon" });
+    expect(await screen.findByText("Enregistré.")).toBeInTheDocument();
+  });
+
   it("saves the notes, or says why not", async () => {
     vi.spyOn(api, "updateLearner")
-      .mockResolvedValueOnce({ customer_id: 7, company_name: null, notes: "x" })
+      .mockResolvedValueOnce({ customer_id: 7, company_name: null, notes: "x", acquisition_source: null, acquisition_detail: null })
       .mockRejectedValueOnce(new ApiError(422, "Trop long."));
     const user = userEvent.setup();
     show();

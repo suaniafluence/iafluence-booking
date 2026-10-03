@@ -199,7 +199,13 @@ def test_detail(cockpit, jean):
 
 def test_notes_and_company_name(cockpit, jean):
     r = cockpit.patch(f"/api/consultant/learners/{jean}", json={"notes": "  Très pressé  ", "company_name": "Dupont SAS"})
-    assert r.json() == {"customer_id": jean, "company_name": "Dupont SAS", "notes": "Très pressé"}
+    assert r.json() == {
+        "customer_id": jean,
+        "company_name": "Dupont SAS",
+        "notes": "Très pressé",
+        "acquisition_source": None,
+        "acquisition_detail": None,
+    }
     r = cockpit.patch(f"/api/consultant/learners/{jean}", json={"notes": ""})
     assert r.json()["notes"] is None and r.json()["company_name"] == "Dupont SAS"
 
@@ -523,7 +529,7 @@ def test_one_plan_per_customer_even_with_a_second_purchase(client, token_for):
 def test_manual_purchase_also_queues_the_plan(cockpit):
     cid = add_customer("Jean Dupont", "jean@example.com")
     add_booking(cid, paris(2026, 10, 2, 10), kind="discovery", minutes=30)
-    r = cockpit.post("/api/consultant/clients", json={"name": "Jean Dupont", "email": "jean@example.com", "hours": 2, "send_link": False})
+    r = cockpit.post("/api/consultant/clients", json={"name": "Jean Dupont", "email": "jean@example.com", "acquisition_source": "site", "hours": 2, "send_link": False})
     assert r.status_code == 201
     with SessionLocal() as db:
         assert db.scalar(select(ActionPlan.status)) == "pending"

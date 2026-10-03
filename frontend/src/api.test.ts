@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, googleSignInUrl, ndaPdfUrl, reportImageUrl } from "./api";
+import { api, ApiError, googleSignInUrl, ndaPdfUrl, reportImageUrl, type NewClient } from "./api";
 
 function mockFetch(status: number, body: unknown, json = true) {
   const fn = vi.fn().mockResolvedValue({
@@ -54,7 +54,15 @@ describe("api", () => {
     );
     await api.adminLogout();
     expect(fetch).toHaveBeenLastCalledWith("/api/admin/logout", expect.objectContaining({ method: "POST" }));
-    const client = { name: "C", email: "c@x.fr", hours: 2, product_name: "Conseil IA", amount_cents: 0, send_link: true };
+    const client: NewClient = {
+      name: "C",
+      email: "c@x.fr",
+      acquisition_source: "whatsapp",
+      hours: 2,
+      product_name: "Conseil IA",
+      amount_cents: 0,
+      send_link: true,
+    };
     await api.adminAddClient(client);
     expect(fetch).toHaveBeenLastCalledWith(
       "/api/consultant/clients",

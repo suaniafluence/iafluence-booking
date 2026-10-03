@@ -130,13 +130,13 @@ class FulfillResult:
     created: bool
 
 
-def upsert_customer(db: Session, name: str, email: str) -> Customer:
-    """Email is the identity; the latest name wins."""
+def upsert_customer(db: Session, name: str, email: str, source: str | None = None) -> Customer:
+    """Email is the identity; the latest name wins. `source` (acquisition) is only set on a new customer."""
     from app.auth import default_consultant_id
 
     db.execute(
         pg_insert(Customer)
-        .values(name=name, email=email, consultant_id=default_consultant_id(db))
+        .values(name=name, email=email, consultant_id=default_consultant_id(db), acquisition_source=source)
         .on_conflict_do_update(index_elements=[Customer.email], set_={"name": name})
     )
     return db.scalar(select(Customer).where(Customer.email == email).execution_options(populate_existing=True))
@@ -149,7 +149,7 @@ def fulfill_checkout(db: Session, stripe_gw: StripeGateway, session_id: str) -> 
 
     info = parse_checkout(stripe_gw.retrieve_checkout_session(session_id))
 
-    customer = upsert_customer(db, info.name, info.email)
+    customer = upsert_customer(db, info.name, info.email, source="site")
 
     inserted_id = db.scalar(
         pg_insert(Purchase)

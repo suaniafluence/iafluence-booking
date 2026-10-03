@@ -77,18 +77,27 @@ class LoginIn(BaseModel):
 Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 
 
+# How a customer came. 'site' is set by the website itself; the others are chosen for a client added by hand.
+AcquisitionSource = Literal["site", "whatsapp", "recommandation", "linkedin", "reseau", "email_telephone", "autre"]
+OptionalText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)]
+
+
 class ManualClientIn(BaseModel):
     name: Label
     email: EmailStr
-    hours: int = Field(ge=1, le=100)
-    product_name: Label = "Conseil IA"
+    acquisition_source: AcquisitionSource
+    acquisition_detail: OptionalText | None = None
+    # No hours: the client is only added to the follow-up (a prospect), without a purchase or booking link.
+    hours: int | None = Field(None, ge=1, le=100)
+    product_name: OptionalText | None = None
     amount_cents: int = Field(0, ge=0)
     send_link: bool = True
 
 
 class ManualClientOut(BaseModel):
-    purchase_id: int
-    booking_url: str
+    customer_id: int
+    purchase_id: int | None
+    booking_url: str | None
 
 
 class CustomerPatchIn(BaseModel):
@@ -185,6 +194,8 @@ class PlatformSettingsIn(BaseModel):
 class LearnerPatchIn(BaseModel):
     company_name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None
     notes: Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000)] | None = None
+    acquisition_source: AcquisitionSource | None = None
+    acquisition_detail: OptionalText | None = None
 
 
 class CompanyAttachIn(BaseModel):

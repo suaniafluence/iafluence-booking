@@ -165,18 +165,24 @@ def add_client(
     db: Session = Depends(get_db),
     mailer=Depends(get_mailer),
 ):
-    """A client paid outside the website: create the purchase and its booking link by hand."""
+    """A client met outside the website (WhatsApp, a recommendation…). With hours paid outside the website, the
+    purchase and its booking link are created too; without, the client is only added to the follow-up."""
     created = manual_purchase.create(
         db,
         name=body.name,
         email=str(body.email).lower(),
+        acquisition_source=body.acquisition_source,
+        acquisition_detail=body.acquisition_detail,
         hours=body.hours,
-        product_name=body.product_name,
+        product_name=body.product_name or "Conseil IA",
         amount_cents=body.amount_cents,
     )
+    if created.purchase is None:
+        return ManualClientOut(customer_id=created.customer.id, purchase_id=None, booking_url=None)
     if body.send_link:
         background.add_task(notifications.send_booking_link, mailer, created.purchase.id, created.token)
     return ManualClientOut(
+        customer_id=created.customer.id,
         purchase_id=created.purchase.id,
         booking_url=notifications.booking_url(created.token, created.purchase.locale),
     )
@@ -447,12 +453,18 @@ def learner_detail(
 def update_learner(
     customer_id: int, body: LearnerPatchIn, db: Session = Depends(get_db), staff: Staff = Depends(require_consultant)
 ):
-    """Company name and private notes of the consultant."""
+    """Company name, acquisition and private notes of the consultant."""
     customer = _learner(db, staff, customer_id)
     for field in body.model_fields_set:
         setattr(customer, field, getattr(body, field) or None)
     db.commit()
-    return {"customer_id": customer.id, "company_name": customer.company_name, "notes": customer.notes}
+    return {
+        "customer_id": customer.id,
+        "company_name": customer.company_name,
+        "notes": customer.notes,
+        "acquisition_source": customer.acquisition_source,
+        "acquisition_detail": customer.acquisition_detail,
+    }
 
 
 def _company_call(action):

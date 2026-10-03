@@ -188,20 +188,21 @@ describe("Cockpit", () => {
   });
 
   it("adds a client by hand and shows the booking link", async () => {
-    const added = deferred<{ purchase_id: number; booking_url: string }>();
+    const added = deferred<{ customer_id: number; purchase_id: number | null; booking_url: string | null }>();
     vi.spyOn(api, "adminAddClient").mockReturnValue(added.promise);
     const user = userEvent.setup();
     renderCockpit();
     await user.click(await screen.findByRole("button", { name: "Ajouter un client" }));
     expect(screen.queryByRole("button", { name: "Ajouter un client" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Heures achetées")).toHaveValue(1);
-    expect(screen.getByLabelText("Prestation")).toHaveValue("Conseil IA");
-    expect(screen.getByLabelText("Envoyer le lien de réservation par email")).toBeChecked();
+    expect(screen.getByLabelText(/Heures achetées/)).toHaveValue(null);
+    expect(screen.getByLabelText("Prestation")).toBeDisabled();
+    expect(screen.getByLabelText("Envoyer le lien de réservation par email")).toBeDisabled();
 
     await user.type(screen.getByLabelText("Nom"), "Claire Durand");
     await user.type(screen.getByLabelText("Email"), "claire@example.com");
-    await user.clear(screen.getByLabelText("Heures achetées"));
-    await user.type(screen.getByLabelText("Heures achetées"), "4");
+    await user.selectOptions(screen.getByLabelText("Mode d’acquisition"), "LinkedIn");
+    await user.type(screen.getByLabelText(/Heures achetées/), "4");
+    expect(screen.getByLabelText("Envoyer le lien de réservation par email")).toBeChecked();
     await user.type(screen.getByLabelText("Montant payé (€)"), "480,50");
     await user.clear(screen.getByLabelText("Prestation"));
     await user.type(screen.getByLabelText("Prestation"), "Atelier IA");
@@ -211,6 +212,8 @@ describe("Cockpit", () => {
     expect(api.adminAddClient).toHaveBeenCalledWith({
       name: "Claire Durand",
       email: "claire@example.com",
+      acquisition_source: "linkedin",
+      acquisition_detail: undefined,
       hours: 4,
       product_name: "Atelier IA",
       amount_cents: 48_050,
@@ -219,7 +222,7 @@ describe("Cockpit", () => {
     expect(screen.getByRole("button", { name: "Ajout…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Annuler" })).toBeDisabled();
 
-    added.resolve({ purchase_id: 3, booking_url: "https://booking.test/reservation/tokC" });
+    added.resolve({ customer_id: 9, purchase_id: 3, booking_url: "https://booking.test/reservation/tokC" });
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Client ajouté. Lien de réservation : https://booking.test/reservation/tokC");
     expect(within(alert).getByRole("button", { name: "Copier le lien" })).toBeInTheDocument();
@@ -227,17 +230,27 @@ describe("Cockpit", () => {
     expect(api.adminOverview).toHaveBeenCalledTimes(2);
   });
 
-  it("sends a zero amount when none is given", async () => {
-    vi.spyOn(api, "adminAddClient").mockResolvedValue({ purchase_id: 3, booking_url: "u" });
+  it("adds a client met elsewhere with only a name, an email and how they came", async () => {
+    vi.spyOn(api, "adminAddClient").mockResolvedValue({ customer_id: 9, purchase_id: null, booking_url: null });
     const user = userEvent.setup();
     renderCockpit();
     await user.click(await screen.findByRole("button", { name: "Ajouter un client" }));
-    await user.type(screen.getByLabelText("Nom"), "C");
-    await user.type(screen.getByLabelText("Email"), "c@x.fr");
+    await user.type(screen.getByLabelText("Nom"), "Ange");
+    await user.type(screen.getByLabelText("Email"), "ange@x.fr");
+    await user.selectOptions(screen.getByLabelText("Mode d’acquisition"), "Autre");
+    await user.type(screen.getByLabelText(/Précisez/), "Salon");
     await user.click(screen.getByRole("button", { name: "Ajouter le client" }));
-    expect(api.adminAddClient).toHaveBeenCalledWith(
-      expect.objectContaining({ hours: 1, amount_cents: 0, product_name: "Conseil IA", send_link: true }),
-    );
+    expect(api.adminAddClient).toHaveBeenCalledWith({
+      name: "Ange",
+      email: "ange@x.fr",
+      acquisition_source: "autre",
+      acquisition_detail: "Salon",
+      hours: null,
+      product_name: undefined,
+      amount_cents: 0,
+      send_link: false,
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Client ajouté au suivi, sans forfait");
   });
 
   it("shows why a client could not be added and lets the admin cancel", async () => {
@@ -247,6 +260,7 @@ describe("Cockpit", () => {
     await user.click(await screen.findByRole("button", { name: "Ajouter un client" }));
     await user.type(screen.getByLabelText("Nom"), "C");
     await user.type(screen.getByLabelText("Email"), "c@x.fr");
+    await user.selectOptions(screen.getByLabelText("Mode d’acquisition"), "WhatsApp");
     await user.click(screen.getByRole("button", { name: "Ajouter le client" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Une erreur est survenue. Veuillez réessayer.");
     expect(screen.getByRole("button", { name: "Ajouter le client" })).toBeEnabled();

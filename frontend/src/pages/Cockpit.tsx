@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { api, ApiError, type AdminOverview, type NewClient } from "../api";
+import { ACQUISITION_SOURCES, api, ApiError, type AcquisitionSource, type AdminOverview, type NewClient } from "../api";
 import { CopyButton } from "../components/CopyButton";
 import { SectionTitle } from "../components/Icon";
 import { Alert, Button, Layout, Spinner } from "../components/Layout";
@@ -106,6 +106,7 @@ type ClientRow = AdminOverview["clients"][number];
 
 function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => void }) {
   const [adding, setAdding] = useState(false);
+  // The booking link of the client just added, or "" when they were added without hours.
   const [added, setAdded] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<number | null>(null);
@@ -160,16 +161,22 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
           onCancel={() => setAdding(false)}
           onAdded={(url) => {
             setAdding(false);
-            setAdded(url);
+            setAdded(url ?? "");
             onChange();
           }}
         />
       )}
-      {added && (
+      {added !== null && (
         <div className="mt-4">
           <Alert tone="info">
-            Client ajouté. Lien de réservation : <span className="break-all font-medium">{added}</span>{" "}
-            <CopyButton text={added} />
+            {added ? (
+              <>
+                Client ajouté. Lien de réservation : <span className="break-all font-medium">{added}</span>{" "}
+                <CopyButton text={added} />
+              </>
+            ) : (
+              "Client ajouté au suivi, sans forfait : retrouvez-le dans la liste des apprenants."
+            )}
           </Alert>
         </div>
       )}
@@ -276,12 +283,23 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
   );
 }
 
-function AddClient({ onCancel, onAdded }: { onCancel: () => void; onAdded: (bookingUrl: string) => void }) {
-  const [form, setForm] = useState({ name: "", email: "", hours: "1", product: "Conseil IA", amount: "", send: true });
+function AddClient({ onCancel, onAdded }: { onCancel: () => void; onAdded: (bookingUrl: string | null) => void }) {
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    source: "" as AcquisitionSource | "",
+    detail: "",
+    hours: "",
+    product: "Conseil IA",
+    amount: "",
+    send: true,
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const set = (k: keyof typeof form) => (e: { target: HTMLInputElement }) =>
-    setForm({ ...form, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  const set = (k: keyof typeof form) => (e: { target: HTMLInputElement | HTMLSelectElement }) =>
+    setForm({ ...form, [k]: e.target instanceof HTMLInputElement && e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  // Without hours the client is only added to the follow-up: no purchase, so nothing else to fill in.
+  const withHours = form.hours.trim() !== "";
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -290,10 +308,12 @@ function AddClient({ onCancel, onAdded }: { onCancel: () => void; onAdded: (book
     const client: NewClient = {
       name: form.name,
       email: form.email,
-      hours: Number(form.hours),
-      product_name: form.product,
-      amount_cents: Math.round(Number(form.amount.replace(",", ".") || 0) * 100),
-      send_link: form.send,
+      acquisition_source: form.source as AcquisitionSource,
+      acquisition_detail: form.source === "autre" ? form.detail : undefined,
+      hours: withHours ? Number(form.hours) : null,
+      product_name: withHours ? form.product : undefined,
+      amount_cents: withHours ? Math.round(Number(form.amount.replace(",", ".") || 0) * 100) : 0,
+      send_link: withHours && form.send,
     };
     try {
       onAdded((await api.adminAddClient(client)).booking_url);
@@ -314,8 +334,35 @@ function AddClient({ onCancel, onAdded }: { onCancel: () => void; onAdded: (book
         <input type="email" value={form.email} onChange={set("email")} className={field} required />
       </label>
       <label className="block text-sm">
-        <span className="font-semibold text-slate-900">Heures achetées</span>
-        <input type="number" min={1} max={100} value={form.hours} onChange={set("hours")} className={field} required />
+        <span className="font-semibold text-slate-900">Mode d’acquisition</span>
+        <select value={form.source} onChange={set("source")} className={field} required>
+          <option value="" disabled>
+            Choisir…
+          </option>
+          {Object.entries(ACQUISITION_SOURCES).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {form.source === "autre" ? (
+        <label className="block text-sm">
+          <span className="font-semibold text-slate-900">Précisez</span>{" "}
+          <span className="text-slate-500">(facultatif)</span>
+          <input value={form.detail} onChange={set("detail")} className={field} maxLength={255} />
+        </label>
+      ) : (
+        <div className="hidden sm:block" />
+      )}
+      <p className="text-sm text-slate-500 sm:col-span-2">
+        Forfait payé hors du site : facultatif. Sans heures, le client est seulement ajouté au suivi, sans lien de
+        réservation.
+      </p>
+      <label className="block text-sm">
+        <span className="font-semibold text-slate-900">Heures achetées</span>{" "}
+        <span className="text-slate-500">(facultatif)</span>
+        <input type="number" min={1} max={100} value={form.hours} onChange={set("hours")} className={field} placeholder="Aucune" />
       </label>
       <label className="block text-sm">
         <span className="font-semibold text-slate-900">Montant payé (€)</span>
@@ -326,14 +373,21 @@ function AddClient({ onCancel, onAdded }: { onCancel: () => void; onAdded: (book
           value={form.amount}
           onChange={set("amount")}
           className={field}
+          disabled={!withHours}
         />
       </label>
       <label className="block text-sm sm:col-span-2">
         <span className="font-semibold text-slate-900">Prestation</span>
-        <input value={form.product} onChange={set("product")} className={field} required maxLength={255} />
+        <input value={form.product} onChange={set("product")} className={field} required={withHours} maxLength={255} disabled={!withHours} />
       </label>
       <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
-        <input type="checkbox" checked={form.send} onChange={set("send")} className="h-[18px] w-[18px] accent-brand-600" />
+        <input
+          type="checkbox"
+          checked={withHours && form.send}
+          onChange={set("send")}
+          disabled={!withHours}
+          className="h-[18px] w-[18px] accent-brand-600"
+        />
         Envoyer le lien de réservation par email
       </label>
       {error && (

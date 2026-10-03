@@ -248,6 +248,8 @@ def detail(db: Session, customer: Customer, now: datetime) -> dict:
             "company_name": customer.company_name,
             "siren": customer.siren,
             "notes": customer.notes,
+            "acquisition_source": customer.acquisition_source,
+            "acquisition_detail": customer.acquisition_detail,
             "auto_send_next_link": customer.auto_send_next_link,
             "nda_sent_at": _iso(customer.nda_sent_at, tz),
             "nda_signed_at": _iso(customer.nda_signed_at, tz),
