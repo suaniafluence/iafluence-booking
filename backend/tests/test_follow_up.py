@@ -13,7 +13,7 @@ from app.config import get_config
 from app.db import SessionLocal
 from app.models import Booking, BookingToken, Customer, Purchase
 from app.services import follow_up
-from tests.conftest import ADMIN_PASSWORD, paris
+from tests.conftest import staff_login, ADMIN_PASSWORD, paris
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -184,8 +184,8 @@ def test_completed_sessions_count_as_delivered_hours(client, fakes, token_for):
     book(client, token_for(hours=3))
     follow_up.process_finished_sessions(fakes["mailer"], END)
     main.app.dependency_overrides[deps.get_now] = lambda: END
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
-    kpis = client.get("/api/admin/overview").json()["kpis"]
+    staff_login(client)
+    kpis = client.get("/api/consultant/overview").json()["kpis"]
     assert (kpis["hours_booked"], kpis["hours_done"]) == (1, 1.0)
 
 

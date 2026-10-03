@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app import i18n
+from app.auth import default_consultant_id
 from app.models import Booking, Customer, Settings
 from app.services import settings_service
 from app.services.availability import Interval, SlotRules, resolve_slot
@@ -66,7 +67,11 @@ def availability(
 
 def _customer(db: Session, name: str, email: str) -> Customer:
     """Existing customers keep their name: anyone can type an email on a public form."""
-    db.execute(pg_insert(Customer).values(name=name, email=email).on_conflict_do_nothing(index_elements=[Customer.email]))
+    db.execute(
+        pg_insert(Customer)
+        .values(name=name, email=email, consultant_id=default_consultant_id(db))
+        .on_conflict_do_nothing(index_elements=[Customer.email])
+    )
     return db.scalar(select(Customer).where(Customer.email == email))
 
 
@@ -117,6 +122,7 @@ def book(
             customer_id=customer.id,
             locale=locale,
             customer_timezone=customer_timezone,
+            message=message or None,
         ),
         summary=i18n.text(locale, "discovery_event_summary", name=name),
         description=description,

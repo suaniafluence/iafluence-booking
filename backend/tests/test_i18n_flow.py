@@ -4,7 +4,7 @@ import pytest
 
 from app.db import SessionLocal
 from app.models import Purchase
-from tests.conftest import paris
+from tests.conftest import staff_login, paris
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -150,16 +150,16 @@ def test_checkout_errors_carry_a_code_for_translation(client):
 def login(client):
     from tests.conftest import ADMIN_PASSWORD
 
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
+    staff_login(client)
 
 
 def test_cancellation_email_in_english_on_the_customer_clock(client, fakes, token_for):
     token = token_for(hours=3, name="John Smith", locale="en")
     book(client, token, timezone="Australia/Sydney")
     login(client)
-    booking_id = client.get("/api/admin/overview").json()["upcoming"][0]["booking_id"]
+    booking_id = client.get("/api/consultant/overview").json()["upcoming"][0]["booking_id"]
     fakes["mailer"].sent.clear()
-    assert client.post(f"/api/admin/bookings/{booking_id}/cancel", json={}).status_code == 200
+    assert client.post(f"/api/consultant/bookings/{booking_id}/cancel", json={}).status_code == 200
     [cancelled] = fakes["mailer"].sent
     assert cancelled["subject"] == "Your AI consulting session has been cancelled"
     assert cancelled["body"].startswith(

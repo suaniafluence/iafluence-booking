@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import BookingToken, Purchase
 from app.services import tokens
-from app.services.stripe_service import upsert_customer
+from app.services.stripe_service import plan_after_purchase, upsert_customer
 
 log = logging.getLogger(__name__)
 
@@ -43,4 +43,5 @@ def create(db: Session, *, name: str, email: str, hours: int, product_name: str,
     db.commit()
     db.refresh(purchase)
     log.info("manual purchase %s created (%s h)", purchase.id, hours)
+    plan_after_purchase(db, purchase)
     return ManualPurchase(purchase, token)

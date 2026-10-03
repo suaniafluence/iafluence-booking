@@ -1,0 +1,14 @@
+Hello {{ name }},
+
+It has been a few weeks since our last AI consulting session, and I hope putting things into practice is going well.
+
+You still have {{ hours_remaining_label }} of consulting left. Now is a good time to review what you have tried and take the next step. Choose your slot here:
+
+{{ booking_url }}
+
+If something is holding you back, just reply to this email and we will talk it through.
+
+Best regards,
+
+{{ consultant_name }}
+IAfluence

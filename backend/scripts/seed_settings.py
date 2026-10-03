@@ -11,7 +11,7 @@ from datetime import time
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models import AvailabilityRule, Settings
+from app.models import AvailabilityRule, Settings, StaffUser
 
 DEFAULT_WEEKLY = {
     0: [(time(9), time(18))],
@@ -43,6 +43,11 @@ def seed(admin_email: str | None = None, booking_calendar: str | None = None) ->
             print("settings created")
         if admin_email:
             settings.admin_email = admin_email
+            # V3: this address signs in with Google to both the admin area and the cockpit.
+            email = admin_email.lower()
+            if db.scalar(select(StaffUser.id).where(StaffUser.email == email)) is None:
+                db.add(StaffUser(email=email, name=settings.consultant_name, is_admin=True, is_consultant=True))
+                print(f"staff account created for {email} (admin + consultant)")
         if booking_calendar:
             settings.booking_calendar_id = booking_calendar
 

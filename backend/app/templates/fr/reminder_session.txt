@@ -1,0 +1,14 @@
+Bonjour {{ name }},
+
+Je reviens vers vous : cela fait quelques semaines que nous n'avons pas fait de session de conseil IA, et j'espère que la mise en pratique avance bien.
+
+Il vous reste {{ hours_remaining_label }} de conseil. C'est le bon moment pour faire le point sur ce que vous avez testé et passer à l'étape suivante. Choisissez votre créneau ici :
+
+{{ booking_url }}
+
+Si quelque chose bloque, répondez simplement à cet email : nous en parlerons.
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence

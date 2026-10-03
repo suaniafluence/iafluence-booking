@@ -1,0 +1,14 @@
+Bonjour {{ name }},
+
+Votre accompagnement Conseil IA s'est terminé il y a quelques semaines : où en êtes-vous de ce que nous avions mis en place ?
+
+Si vous souhaitez aller plus loin (nouveau cas d'usage, déploiement à votre équipe, mise à jour des outils), vous pouvez reprendre des heures de conseil ici :
+
+{{ shop_url }}
+
+Et si vous avez simplement une question, répondez à cet email.
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence

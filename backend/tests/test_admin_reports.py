@@ -12,7 +12,7 @@ from app.models import CodexLogin, Customer, Purchase, SessionReport
 from app.services import follow_up, session_reports
 from app.services.codex import CodexAccount
 from app.services.session_reports import Gateways
-from tests.conftest import ADMIN_PASSWORD, NOW, SYNTHESE, paris
+from tests.conftest import staff_login, ADMIN_PASSWORD, NOW, SYNTHESE, paris
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -29,7 +29,7 @@ def reports_on(monkeypatch):
 
 @pytest.fixture
 def admin(client):
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
+    staff_login(client)
     return client
 
 
@@ -61,7 +61,7 @@ def set_report(**values):
 
 
 def sessions(admin):
-    return admin.get("/api/admin/overview").json()["reports"]
+    return admin.get("/api/consultant/overview").json()["reports"]
 
 
 # --- overview ----------------------------------------------------------------------------------------------------
@@ -123,11 +123,11 @@ def test_sessions_without_report_and_upcoming_ones(admin, fakes, token_for, monk
 
 def test_report_endpoints_need_the_admin(client):
     for method, path in [
-        ("get", "/api/admin/reports/1/image.png"),
-        ("post", "/api/admin/reports/1/retry"),
-        ("post", "/api/admin/reports/1/draft-without-summary"),
-        ("post", "/api/admin/reports/1/retry-email"),
-        ("patch", "/api/admin/report-settings"),
+        ("get", "/api/consultant/reports/1/image.png"),
+        ("post", "/api/consultant/reports/1/retry"),
+        ("post", "/api/consultant/reports/1/draft-without-summary"),
+        ("post", "/api/consultant/reports/1/retry-email"),
+        ("patch", "/api/consultant/report-settings"),
         ("get", "/api/admin/codex"),
         ("post", "/api/admin/codex/login"),
         ("get", "/api/admin/codex/login/1"),
@@ -138,9 +138,9 @@ def test_report_endpoints_need_the_admin(client):
 
 
 def test_infographic_is_served_to_the_admin_only(ended, admin):
-    assert admin.get(f"/api/admin/reports/{ended}/image.png").status_code == 404
+    assert admin.get(f"/api/consultant/reports/{ended}/image.png").status_code == 404
     set_report(image_png=b"\x89PNG-fake")
-    r = admin.get(f"/api/admin/reports/{ended}/image.png")
+    r = admin.get(f"/api/consultant/reports/{ended}/image.png")
     assert (r.status_code, r.content, r.headers["content-type"]) == (200, b"\x89PNG-fake", "image/png")
     assert r.headers["cache-control"] == "private, no-store"
 
@@ -150,7 +150,7 @@ def test_infographic_is_served_to_the_admin_only(ended, admin):
 
 def test_retry_searches_fireflies_again_for_6_hours(ended, admin):
     set_report(status="failed", error="x", next_attempt_at=None, waiting_since=END - timedelta(hours=8))
-    r = admin.post(f"/api/admin/reports/{ended}/retry")
+    r = admin.post(f"/api/consultant/reports/{ended}/retry")
     assert r.json() == {"id": ended, "status": "waiting_transcript"}
     got = report()
     assert (got.waiting_since, got.next_attempt_at, got.error) == (END + timedelta(minutes=1),) * 2 + (None,)
@@ -158,7 +158,7 @@ def test_retry_searches_fireflies_again_for_6_hours(ended, admin):
 
 def test_retry_summarizes_again_when_the_transcript_was_found(ended, admin):
     set_report(status="failed", fireflies_transcript_id="ff_1", error="x", claimed_until=END)
-    assert admin.post(f"/api/admin/reports/{ended}/retry").json()["status"] == "summarizing"
+    assert admin.post(f"/api/consultant/reports/{ended}/retry").json()["status"] == "summarizing"
     got = report()
     assert (got.next_attempt_at, got.claimed_until, got.error, got.waiting_since) == (
         END + timedelta(minutes=1),
@@ -183,19 +183,19 @@ def test_retry_summarizes_again_when_the_transcript_was_found(ended, admin):
 def test_actions_are_refused_while_busy_or_done(ended, admin, fakes, values, message):
     set_report(**values)
     for action in ("retry", "draft-without-summary"):
-        r = admin.post(f"/api/admin/reports/{ended}/{action}")
+        r = admin.post(f"/api/consultant/reports/{ended}/{action}")
         assert (r.status_code, r.json()["detail"]) == (409, message)
     assert fakes["mailer"].drafts == []
 
 
 def test_expired_claim_can_be_taken_over(ended, admin):
     set_report(status="summarizing", fireflies_transcript_id="ff_1", claimed_until=END)
-    assert admin.post(f"/api/admin/reports/{ended}/retry").status_code == 200
+    assert admin.post(f"/api/consultant/reports/{ended}/retry").status_code == 200
 
 
 def test_unknown_report(admin):
     for action in ("retry", "draft-without-summary"):
-        r = admin.post(f"/api/admin/reports/999/{action}")
+        r = admin.post(f"/api/consultant/reports/999/{action}")
         assert (r.status_code, r.json()["detail"]) == (404, "Compte rendu introuvable.")
 
 
@@ -203,21 +203,21 @@ def test_draft_without_summary_is_always_a_draft(ended, admin, fakes):
     with SessionLocal() as db:
         db.execute(update(Customer).values(auto_send_next_link=True))
         db.commit()
-    r = admin.post(f"/api/admin/reports/{ended}/draft-without-summary")
+    r = admin.post(f"/api/consultant/reports/{ended}/draft-without-summary")
     assert r.json() == {"id": ended, "status": "drafted"}
     [mail] = fakes["mailer"].drafts
     assert (mail["to"], mail["subject"]) == (CLIENT, session_reports.SUBJECT_NEXT_V1)
     assert fakes["mailer"].sent == []
     got = report()
     assert (got.status, got.delivery, got.with_summary) == ("drafted", "draft", False)
-    assert admin.post(f"/api/admin/reports/{ended}/draft-without-summary").status_code == 409
+    assert admin.post(f"/api/consultant/reports/{ended}/draft-without-summary").status_code == 409
 
 
 def test_draft_without_summary_on_a_refunded_purchase(ended, admin, fakes):
     with SessionLocal() as db:
         db.execute(update(Purchase).values(payment_status="refunded"))
         db.commit()
-    r = admin.post(f"/api/admin/reports/{ended}/draft-without-summary")
+    r = admin.post(f"/api/consultant/reports/{ended}/draft-without-summary")
     assert (r.status_code, r.json()["detail"]) == (409, "Achat remboursé : aucun email préparé.")
     assert report().status == "failed" and fakes["mailer"].drafts == []
 
@@ -241,7 +241,7 @@ def test_overview_shows_a_gmail_failure(ended, admin, fakes):
 def test_retry_email_prepares_the_same_email_again(ended, admin, fakes):
     gmail_failed(fakes, ended)
     at(END + timedelta(hours=2))
-    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    r = admin.post(f"/api/consultant/reports/{ended}/retry-email")
     assert r.json() == {"id": ended, "status": "drafted"}
     [mail] = fakes["mailer"].drafts
     assert (mail["to"], mail["subject"]) == (CLIENT, session_reports.SUBJECT_NEXT) and mail["html"]
@@ -249,7 +249,7 @@ def test_retry_email_prepares_the_same_email_again(ended, admin, fakes):
     assert (got.status, got.delivery, got.with_summary, got.error) == ("drafted", "draft", True, None)
     assert got.drafted_at == END + timedelta(hours=2)
     # Done: a second click does nothing.
-    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    r = admin.post(f"/api/consultant/reports/{ended}/retry-email")
     assert (r.status_code, r.json()["detail"]) == (409, "Cet email n'a pas échoué : rien à recréer.")
     assert len(fakes["mailer"].drafts) == 1
 
@@ -258,7 +258,7 @@ def test_retry_email_fails_again(ended, admin, fakes):
     """Gmail is called before answering: the admin learns at once that this attempt failed too."""
     gmail_failed(fakes, ended)
     fakes["mailer"].fail = True
-    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    r = admin.post(f"/api/consultant/reports/{ended}/retry-email")
     assert (r.status_code, r.json()["detail"]) == (502, session_reports.GMAIL_FAILED)
     got = report()
     assert (got.delivery, got.error) == ("failed", session_reports.GMAIL_FAILED)
@@ -271,14 +271,14 @@ def test_retry_email_never_sends_automatically(ended, admin, fakes):
         db.execute(update(Customer).values(auto_send_next_link=True))
         db.commit()
     set_report(status="drafted", delivery="failed", with_summary=False, error=session_reports.GMAIL_FAILED)
-    assert admin.post(f"/api/admin/reports/{ended}/retry-email").status_code == 200
+    assert admin.post(f"/api/consultant/reports/{ended}/retry-email").status_code == 200
     assert fakes["mailer"].sent == [] and len(fakes["mailer"].drafts) == 1
     assert report().delivery == "draft"
 
 
 def test_retry_email_without_summary_stays_without(ended, admin, fakes):
     set_report(status="drafted", delivery="failed", with_summary=False, summary=SYNTHESE)
-    admin.post(f"/api/admin/reports/{ended}/retry-email")
+    admin.post(f"/api/consultant/reports/{ended}/retry-email")
     [mail] = fakes["mailer"].drafts
     assert mail["subject"] == session_reports.SUBJECT_NEXT_V1 and report().with_summary is False
 
@@ -288,7 +288,7 @@ def test_retry_email_on_a_refunded_purchase(ended, admin, fakes):
     with SessionLocal() as db:
         db.execute(update(Purchase).values(payment_status="refunded"))
         db.commit()
-    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    r = admin.post(f"/api/consultant/reports/{ended}/retry-email")
     assert (r.status_code, r.json()["detail"]) == (409, "Achat remboursé : aucun email préparé.")
     assert report().status == "failed" and fakes["mailer"].drafts == []
 
@@ -296,19 +296,19 @@ def test_retry_email_on_a_refunded_purchase(ended, admin, fakes):
 @pytest.mark.parametrize("values", [{"status": "waiting_transcript"}, {"status": "drafted", "delivery": "draft"}])
 def test_retry_email_only_after_a_gmail_failure(ended, admin, fakes, values):
     set_report(**values)
-    r = admin.post(f"/api/admin/reports/{ended}/retry-email")
+    r = admin.post(f"/api/consultant/reports/{ended}/retry-email")
     assert (r.status_code, r.json()["detail"]) == (409, "Cet email n'a pas échoué : rien à recréer.")
-    assert admin.post("/api/admin/reports/999/retry-email").status_code == 404
+    assert admin.post("/api/consultant/reports/999/retry-email").status_code == 404
     assert fakes["mailer"].drafts == []
 
 
 def test_send_without_review_setting(admin):
-    r = admin.patch("/api/admin/report-settings", json={"send_without_review": True})
+    r = admin.patch("/api/consultant/report-settings", json={"send_without_review": True})
     assert r.json() == {"send_without_review": True}
     assert sessions(admin)["send_without_review"] is True
-    admin.patch("/api/admin/report-settings", json={"send_without_review": False})
+    admin.patch("/api/consultant/report-settings", json={"send_without_review": False})
     assert sessions(admin)["send_without_review"] is False
-    assert admin.patch("/api/admin/report-settings", json={}).status_code == 422
+    assert admin.patch("/api/consultant/report-settings", json={}).status_code == 422
 
 
 # --- Codex connection --------------------------------------------------------------------------------------------

@@ -1,0 +1,14 @@
+Hello {{ name }},
+
+Your AI consulting programme ended a few weeks ago: how is everything we set up working out?
+
+If you would like to go further (a new use case, rolling it out to your team, updating the tools), you can book more consulting hours here:
+
+{{ shop_url }}
+
+And if you simply have a question, just reply to this email.
+
+Best regards,
+
+{{ consultant_name }}
+IAfluence

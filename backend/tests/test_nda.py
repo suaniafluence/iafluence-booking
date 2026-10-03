@@ -10,7 +10,7 @@ from app.models import Booking, Customer
 from app.routers import public
 from app.services import nda
 from app.services.email_service import build_message
-from tests.conftest import ADMIN_PASSWORD, NOW, paris
+from tests.conftest import staff_login, ADMIN_PASSWORD, NOW, paris
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -25,12 +25,12 @@ def fresh_limiter():
 
 
 def login(client):
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
+    staff_login(client)
 
 
 def upload(client, locale="fr", pdf=PDF, filename="NDA IAfluence - signé.pdf"):
     return client.put(
-        f"/api/admin/nda/documents/{locale}",
+        f"/api/consultant/nda/documents/{locale}",
         params={"filename": filename},
         content=pdf,
         headers={"Content-Type": "application/pdf"},
@@ -55,32 +55,32 @@ def book_discovery(client, email="paul@example.com", start=paris(2026, 10, 6, 9,
 
 
 def test_endpoints_require_the_admin_session(client):
-    assert client.get("/api/admin/nda").status_code == 401
+    assert client.get("/api/consultant/nda").status_code == 401
     assert upload(client).status_code == 401
-    assert client.get("/api/admin/nda/documents/fr.pdf").status_code == 401
-    assert client.delete("/api/admin/nda/documents/fr").status_code == 401
-    assert client.post("/api/admin/nda/send", json={"name": "A", "email": "a@example.com"}).status_code == 401
-    assert client.patch("/api/admin/customers/1/nda", json={"signed": True}).status_code == 401
+    assert client.get("/api/consultant/nda/documents/fr.pdf").status_code == 401
+    assert client.delete("/api/consultant/nda/documents/fr").status_code == 401
+    assert client.post("/api/consultant/nda/send", json={"name": "A", "email": "a@example.com"}).status_code == 401
+    assert client.patch("/api/consultant/customers/1/nda", json={"signed": True}).status_code == 401
 
 
 def test_upload_replace_download_and_delete_the_pdf(client):
     login(client)
-    assert client.get("/api/admin/nda").json() == {"documents": [], "customers": []}
+    assert client.get("/api/consultant/nda").json() == {"documents": [], "customers": []}
     r = upload(client)
     assert r.status_code == 200, r.text
     assert r.json() == {"locale": "fr", "filename": "NDA IAfluence - signé.pdf", "size": len(PDF)}
 
     assert upload(client, pdf=PDF + b"v2", filename="nda-v2.pdf").json()["filename"] == "nda-v2.pdf"
-    r = client.get("/api/admin/nda/documents/fr.pdf")
+    r = client.get("/api/consultant/nda/documents/fr.pdf")
     assert (r.status_code, r.content, r.headers["content-type"]) == (200, PDF + b"v2", "application/pdf")
     assert r.headers["cache-control"] == "private, no-store"
-    assert client.get("/api/admin/nda").json()["documents"] == [
+    assert client.get("/api/consultant/nda").json()["documents"] == [
         {"locale": "fr", "filename": "nda-v2.pdf", "size": len(PDF) + 2, "uploaded_at": NOW.isoformat()}
     ]
 
-    assert client.delete("/api/admin/nda/documents/fr").json() == {"status": "deleted"}
-    assert client.get("/api/admin/nda/documents/fr.pdf").status_code == 404
-    assert client.delete("/api/admin/nda/documents/fr").status_code == 404
+    assert client.delete("/api/consultant/nda/documents/fr").json() == {"status": "deleted"}
+    assert client.get("/api/consultant/nda/documents/fr.pdf").status_code == 404
+    assert client.delete("/api/consultant/nda/documents/fr").status_code == 404
 
 
 def test_upload_refuses_what_is_not_a_pdf_too_big_or_an_unknown_language(client, monkeypatch):
@@ -91,7 +91,7 @@ def test_upload_refuses_what_is_not_a_pdf_too_big_or_an_unknown_language(client,
     assert upload(client, locale="FR").status_code == 404
     monkeypatch.setattr(nda, "MAX_PDF_BYTES", len(PDF) - 1)
     assert upload(client).status_code == 413
-    assert client.get("/api/admin/nda").json()["documents"] == []
+    assert client.get("/api/consultant/nda").json()["documents"] == []
 
 
 @pytest.mark.parametrize(
@@ -144,7 +144,7 @@ def test_first_session_with_the_box_ticked_emails_the_signed_pdf(client, fakes, 
 
     assert customer("jean@example.com").nda_sent_at is not None
     assert client.get(f"/api/booking/{token}").json()["nda_sent"] is True
-    listed = client.get("/api/admin/nda").json()["customers"]
+    listed = client.get("/api/consultant/nda").json()["customers"]
     assert [(c["email"], c["signed_at"]) for c in listed] == [("jean@example.com", None)]
 
 
@@ -212,19 +212,19 @@ def test_gmail_failure_leaves_it_unsent(client, fakes):
 
 def test_admin_sends_it_to_a_new_contact_and_again_to_a_known_one(client, fakes):
     login(client)
-    r = client.post("/api/admin/nda/send", json={"name": "Claire", "email": "claire@example.com"})
+    r = client.post("/api/consultant/nda/send", json={"name": "Claire", "email": "claire@example.com"})
     assert (r.status_code, r.json()["detail"]) == (409, "Téléversez d'abord le NDA signé (PDF).")
     assert customer("claire@example.com") is None
 
     upload(client)
-    r = client.post("/api/admin/nda/send", json={"name": " Claire Durand ", "email": "Claire@Example.com"})
+    r = client.post("/api/consultant/nda/send", json={"name": " Claire Durand ", "email": "Claire@Example.com"})
     assert r.status_code == 200, r.text
     assert r.json()["sent_at"] == NOW.isoformat()
     c = customer("claire@example.com")
     assert (c.name, r.json()["customer_id"]) == ("Claire Durand", c.id)
 
     # Resent on demand, even though she already received it; she keeps her name.
-    r = client.post("/api/admin/nda/send", json={"name": "Autre nom", "email": "claire@example.com", "locale": "en"})
+    r = client.post("/api/consultant/nda/send", json={"name": "Autre nom", "email": "claire@example.com", "locale": "en"})
     assert r.status_code == 200
     assert customer("claire@example.com").name == "Claire Durand"
     assert [m["to"] for m in nda_mails(fakes)] == ["claire@example.com", "claire@example.com"]
@@ -235,7 +235,7 @@ def test_admin_send_reports_a_gmail_failure(client, fakes):
     login(client)
     upload(client)
     fakes["mailer"].fail = True
-    r = client.post("/api/admin/nda/send", json={"name": "Claire", "email": "claire@example.com"})
+    r = client.post("/api/consultant/nda/send", json={"name": "Claire", "email": "claire@example.com"})
     assert (r.status_code, r.json()["detail"]) == (502, "Gmail a refusé l'email du NDA (voir les logs de l'API).")
     assert customer("claire@example.com") is None
 
@@ -243,11 +243,11 @@ def test_admin_send_reports_a_gmail_failure(client, fakes):
 def test_signed_received_is_ticked_and_unticked(client, fakes):
     login(client)
     upload(client)
-    cid = client.post("/api/admin/nda/send", json={"name": "Claire", "email": "claire@example.com"}).json()["customer_id"]
+    cid = client.post("/api/consultant/nda/send", json={"name": "Claire", "email": "claire@example.com"}).json()["customer_id"]
 
-    r = client.patch(f"/api/admin/customers/{cid}/nda", json={"signed": True})
+    r = client.patch(f"/api/consultant/customers/{cid}/nda", json={"signed": True})
     assert r.json() == {"customer_id": cid, "signed_at": NOW.isoformat()}
-    assert client.get("/api/admin/nda").json()["customers"] == [
+    assert client.get("/api/consultant/nda").json()["customers"] == [
         {
             "customer_id": cid,
             "name": "Claire",
@@ -256,16 +256,16 @@ def test_signed_received_is_ticked_and_unticked(client, fakes):
             "signed_at": NOW.isoformat(),
         }
     ]
-    assert client.patch(f"/api/admin/customers/{cid}/nda", json={"signed": False}).json()["signed_at"] is None
+    assert client.patch(f"/api/consultant/customers/{cid}/nda", json={"signed": False}).json()["signed_at"] is None
 
 
 def test_signed_needs_a_sent_agreement_and_a_known_customer(client, token_for):
     login(client)
     token_for()
     cid = customer("jean@example.com").id
-    r = client.patch(f"/api/admin/customers/{cid}/nda", json={"signed": True})
+    r = client.patch(f"/api/consultant/customers/{cid}/nda", json={"signed": True})
     assert (r.status_code, r.json()["detail"]) == (409, "Le NDA n'a pas encore été envoyé à ce client.")
-    assert client.patch("/api/admin/customers/999/nda", json={"signed": True}).status_code == 404
+    assert client.patch("/api/consultant/customers/999/nda", json={"signed": True}).status_code == 404
 
 
 # --- the email itself --------------------------------------------------------------------------------------------

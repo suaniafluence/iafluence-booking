@@ -1,0 +1,14 @@
+Hola, {{ name }}:
+
+Han pasado unas semanas desde nuestra última sesión de asesoría en IA y espero que la puesta en práctica esté avanzando bien.
+
+Le {{ "queda" if hours_remaining == 1 else "quedan" }} {{ hours_remaining_label }} de asesoría. Es un buen momento para revisar lo que ha probado y dar el siguiente paso. Elija su horario aquí:
+
+{{ booking_url }}
+
+Si algo le frena, responda simplemente a este correo y lo hablamos.
+
+Hasta pronto,
+
+{{ consultant_name }}
+IAfluence
