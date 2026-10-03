@@ -14,6 +14,9 @@
 		X-Frame-Options "DENY"
 		# Booking tokens live in the URL: never leak them through the Referer header.
 		Referrer-Policy "no-referrer"
+		# No third-party script or framing: a booking URL is a bearer credential.
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; script-src 'self'"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 		-Server
 	}
 
@@ -25,8 +28,13 @@
 	}
 
 	handle /webhooks/* {
+		header Cache-Control "no-store"
 		reverse_proxy api:8000
 	}
+
+	# The token embedded in these paths grants access to booking information.
+	@booking path_regexp booking ^/(fr|en|es)?/?reservation(/.*)?$
+	header @booking Cache-Control "no-store"
 
 	handle {
 		root * /srv

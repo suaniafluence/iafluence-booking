@@ -26,6 +26,8 @@
 
 Réservation des **sessions de 1 h** après l’achat d’une prestation « Conseil IA » sur Stripe (ou d’un client ajouté à la main) : la première tout de suite, les suivantes via un lien envoyé après chaque session.
 
+> **Conformité :** avant toute utilisation avec des clients réels, consulter l’[audit éthique, RGPD et international](docs/conformite-ethique-rgpd-international.md). L’enregistrement/transcription et le traitement par IA y sont classés **no-go** tant que les prérequis P0 (information, consentement réellement facultatif, contrats, transferts, AIPD, rétention et droits) ne sont pas clos.
+
 Paiement Stripe → vérification → lien de réservation sécurisé → créneaux libres agrégés depuis plusieurs Google Calendars (free/busy uniquement) → création de l’événement Google Calendar + Meet + invitation → emails client et admin → suivi des heures achetées / réservées / restantes → après chaque séance, **compte rendu rédigé par votre agent Codex à partir de la transcription Fireflies**, préparé en brouillon Gmail.
 
 ```
