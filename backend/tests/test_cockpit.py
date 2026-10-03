@@ -567,7 +567,11 @@ def test_run_forever_survives_errors(monkeypatch):
 
     async def main():
         task = asyncio.create_task(action_plans.run_forever(lambda: None, 0.01, lambda: NOW))
-        await asyncio.sleep(0.05)
+        # Wait for the second cycle instead of a fixed delay: a slow CI runner can take >50 ms per cycle.
+        for _ in range(500):
+            if len(calls) >= 2:
+                break
+            await asyncio.sleep(0.01)
         task.cancel()
 
     asyncio.run(main())
