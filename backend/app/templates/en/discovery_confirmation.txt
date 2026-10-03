@@ -1,0 +1,28 @@
+Hello {{ name }},
+
+Your free {{ minutes }}-minute discovery call with IAfluence is confirmed.
+
+Date:
+{{ date_long }}
+
+Time:
+{{ hour_range }}{{ " (" ~ local_city ~ " time)" if paris else "" }}
+
+{% if paris %}
+Paris time:
+{{ paris.date_long }}, {{ paris.hour_range }}
+
+{% endif %}
+{% if meet_url %}
+Video call link:
+{{ meet_url }}
+
+{% endif %}
+We will talk about your business, your needs and what artificial intelligence can do for you. If the time no longer suits you, simply reply to this email to change it.
+
+You will also receive a calendar invitation.
+
+Looking forward to speaking with you,
+
+{{ consultant_name }}
+IAfluence

@@ -33,7 +33,7 @@ export default function CheckoutRedirect() {
     <Layout>
       {error ? (
         <Card>
-          <h1 className="text-xl font-semibold text-slate-900">{t.checkout.failedTitle}</h1>
+          <h1 className="text-xl font-extrabold text-slate-900">{t.checkout.failedTitle}</h1>
           <div className="mt-4">
             <Alert>{error}</Alert>
           </div>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { api, ApiError } from "../../api";
 import { Alert, Button } from "../../components/Layout";
+import { SectionTitle } from "../../components/Icon";
 import { dayKey } from "../../format";
 
 /** "2026-10-05" moved by `n` days, on the calendar only (no clock, no DST). */
@@ -19,7 +20,7 @@ export function defaultPeriod(now = new Date()): { start: string; end: string } 
 }
 
 const field =
-  "mt-1 block rounded-xl border border-slate-300 px-3 py-2 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600";
+  "mt-1 block rounded border-[1.5px] border-slate-300 bg-white px-3.5 py-2.5 transition-colors hover:border-slate-500 focus:border-brand-600 focus:outline-none focus:ring-3 focus:ring-brand-600/20";
 
 /**
  * « Imprimer mon calendrier » : every calendar over the chosen period as a very light PDF, one page per week.
@@ -54,7 +55,7 @@ export function CalendarPrint() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-slate-900">Imprimer mon calendrier</h2>
+      <SectionTitle icon="printer">Imprimer mon calendrier</SectionTitle>
       <p className="mt-1 text-sm text-slate-500">
         Tous vos agendas sur la période choisie, sans aucun détail : chaque rendez-vous apparaît « Occupé ». Ceux dont le
         titre se termine par « ? » sont en pointillé (pas encore fixés ou pas sûrs). PDF très clair, une page par semaine,
@@ -65,7 +66,7 @@ export function CalendarPrint() {
         className="mt-3 flex flex-wrap items-end gap-4 rounded-2xl border border-slate-200 bg-white p-5"
       >
         <label className="block text-sm">
-          <span className="text-slate-600">Du</span>
+          <span className="font-semibold text-slate-900">Du</span>
           <input
             type="date"
             value={period.start}
@@ -75,7 +76,7 @@ export function CalendarPrint() {
           />
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Au</span>
+          <span className="font-semibold text-slate-900">Au</span>
           <input
             type="date"
             value={period.end}

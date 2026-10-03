@@ -1,0 +1,14 @@
+Hola, {{ name }}:
+
+Gracias de nuevo por nuestra llamada de descubrimiento. ¿Ha podido avanzar con las ideas de IA que comentamos?
+
+Si desea ponerlas en práctica juntos, las horas de asesoría se reservan aquí:
+
+{{ shop_url }}
+
+¿Alguna pregunta antes de decidirse? Responda simplemente a este correo.
+
+Hasta pronto,
+
+{{ consultant_name }}
+IAfluence

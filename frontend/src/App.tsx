@@ -1,10 +1,14 @@
 import { useEffect, type ReactNode } from "react";
-import { Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Layout, Spinner } from "./components/Layout";
 import { browserLang, isLang, LangProvider, useI18n } from "./i18n";
 import Admin from "./pages/Admin";
+import Cockpit from "./pages/Cockpit";
+import LearnerPage from "./pages/consultant/LearnerPage";
 import CheckoutRedirect from "./pages/CheckoutRedirect";
+import Discovery from "./pages/Discovery";
+import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
 import Reservation from "./pages/Reservation";
 
@@ -13,11 +17,18 @@ export default function App() {
     <Routes>
       <Route path="/:lang/reservation" element={<WithLang><CheckoutRedirect /></WithLang>} />
       <Route path="/:lang/reservation/:token" element={<WithLang><Reservation /></WithLang>} />
+      {/* Free discovery call, linked from iafluence.fr. */}
+      <Route path="/:lang/decouverte" element={<WithLang><Discovery /></WithLang>} />
+      <Route path="/decouverte" element={<Navigate to={`/${browserLang()}/decouverte`} replace />} />
       {/* Stripe's return URL is the same for every language: the purchase knows the language. */}
       <Route path="/reservation" element={<LangProvider lang={browserLang()}><CheckoutRedirect /></LangProvider>} />
       {/* Booking links emailed before the site was multilingual. */}
       <Route path="/reservation/:token" element={<LangProvider lang={browserLang()}><LegacyBookingLink /></LangProvider>} />
+      {/* Staff: the two areas, from the base URL. */}
+      <Route path="/" element={<Home />} />
       <Route path="/admin" element={<Admin />} />
+      <Route path="/consultant" element={<Cockpit />} />
+      <Route path="/consultant/apprenants/:id" element={<LearnerPage />} />
       <Route path="*" element={<LangProvider lang={browserLang()}><NotFound /></LangProvider>} />
     </Routes>
   );

@@ -13,9 +13,10 @@ from sqlalchemy import func, select, text, update
 from app.config import Config
 from app.db import SessionLocal
 from app.models import AvailabilityRule, Booking, BookingToken, CalendarSource, Customer, Purchase, Settings, StripeEvent
+from app import auth
 from app.routers import admin as admin_router
 from app.services import settings_service, stripe_service
-from tests.conftest import ADMIN_PASSWORD, paris
+from tests.conftest import ADMIN_PASSWORD, paris, staff_login
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -199,7 +200,7 @@ def login(client):
 def test_login_sets_hardened_cookie(client):
     cookie = login(client).headers["set-cookie"]
     assert cookie.startswith("iaf_admin=")
-    for attr in ("HttpOnly", "Max-Age=43200", "Path=/api/admin", "SameSite=strict"):
+    for attr in ("HttpOnly", "Max-Age=43200", "Path=/api;", "SameSite=strict"):
         assert attr in cookie
     assert "Secure" not in cookie  # COOKIE_SECURE=false in tests
 
@@ -220,16 +221,16 @@ def test_login_refused_when_hash_unusable(client, no_sleep, monkeypatch, hash_):
 
 def test_forged_cookie_rejected(client):
     forged = URLSafeTimedSerializer("attacker-secret", salt="admin-session").dumps({"admin": True})
-    client.cookies.set("iaf_admin", forged, path="/api/admin")
-    r = client.get("/api/admin/overview")
+    client.cookies.set("iaf_admin", forged, path="/api")
+    r = client.get("/api/admin/settings")
     assert r.status_code == 401 and r.json()["detail"] == "Session expirée."
 
 
 def test_expired_session_rejected(client, monkeypatch):
     login(client)
-    assert client.get("/api/admin/overview").status_code == 200
-    monkeypatch.setattr(admin_router, "SESSION_MAX_AGE", -1)
-    assert client.get("/api/admin/overview").json()["detail"] == "Session expirée."
+    assert client.get("/api/admin/settings").status_code == 200
+    monkeypatch.setattr(auth, "SESSION_MAX_AGE", -1)
+    assert client.get("/api/admin/settings").json()["detail"] == "Session expirée."
 
 
 def test_logout_clears_session(client):
@@ -237,7 +238,7 @@ def test_logout_clears_session(client):
     r = client.post("/api/admin/logout")
     assert r.json() == {"status": "ok"}
     assert 'iaf_admin=""' in r.headers["set-cookie"] and "Max-Age=0" in r.headers["set-cookie"]
-    assert client.get("/api/admin/overview").status_code == 401
+    assert client.get("/api/admin/settings").status_code == 401
 
 
 def test_admin_overview_kpis_and_lists(client, fakes, token_for):
@@ -261,8 +262,8 @@ def test_admin_overview_kpis_and_lists(client, fakes, token_for):
                        end_datetime=paris(2026, 10, 2, 11, 30), status="confirmed"))
         db.commit()
 
-    login(client)
-    data = client.get("/api/admin/overview").json()
+    staff_login(client)
+    data = client.get("/api/consultant/overview").json()
     assert data["kpis"] == {
         "payments_this_month": 2,  # Jean + Passé (Marie is September, the refund is excluded)
         "revenue_this_month_cents": 60_000,
@@ -273,7 +274,7 @@ def test_admin_overview_kpis_and_lists(client, fakes, token_for):
         "hours_to_deliver": 6.5,
     }
     assert data["upcoming"] == [
-        {"booking_id": 1, "customer": "Jean Dupont", "email": "jean@example.com", "product": "Conseil IA - 5h",
+        {"booking_id": 1, "kind": "session", "customer": "Jean Dupont", "email": "jean@example.com", "product": "Conseil IA - 5h",
          "start": "2026-10-08T14:00:00+02:00", "end": "2026-10-08T15:00:00+02:00", "meet_url": "https://meet.google.com/abc-defg-hij"}
     ]
     clients = {c["name"]: c for c in data["clients"]}
@@ -284,8 +285,8 @@ def test_admin_overview_kpis_and_lists(client, fakes, token_for):
 
 
 def test_admin_overview_empty(client):
-    login(client)
-    data = client.get("/api/admin/overview").json()
+    staff_login(client)
+    data = client.get("/api/consultant/overview").json()
     assert data["kpis"]["hours_sold"] == 0 and data["kpis"]["hours_done"] == 0
     assert data["upcoming"] == [] and data["clients"] == []
 
@@ -509,11 +510,11 @@ def test_redirect_replay_returns_the_purchase_own_newest_token(client, fakes, to
 def test_cookie_signed_for_another_purpose_is_rejected(client, salt):
     kw = {} if salt is None else {"salt": salt}
     client.cookies.set("iaf_admin", URLSafeTimedSerializer("test-secret", **kw).dumps({"admin": True}), path="/api/admin")
-    assert client.get("/api/admin/overview").status_code == 401
+    assert client.get("/api/consultant/overview").status_code == 401
 
 
 def test_missing_cookie_message(client):
-    assert client.get("/api/admin/overview").json() == {"detail": "Authentification requise."}
+    assert client.get("/api/consultant/overview").json() == {"detail": "Authentification requise."}
 
 
 # --- exact email contents ---------------------------------------------------------------------

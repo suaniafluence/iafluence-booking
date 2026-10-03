@@ -21,10 +21,10 @@
 	}
 
 	handle /api/* {
-		# GET responses contain customer, payment and appointment data. Do not let a
-		# browser or an intermediary retain them after the user leaves the page.
-		header Cache-Control "no-store"
-		reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			# The visitor's address (behind the trusted nginx): rate limit of the free discovery call.
+			header_up X-Real-IP {client_ip}
+		}
 	}
 
 	handle /webhooks/* {

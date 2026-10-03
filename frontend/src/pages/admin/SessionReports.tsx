@@ -9,7 +9,9 @@ import {
   type Synthese,
 } from "../../api";
 import { Alert } from "../../components/Layout";
+import { SectionTitle } from "../../components/Icon";
 import { hm, longDate } from "../../format";
+import { OtherMeetings } from "./OtherMeetings";
 
 const SECTIONS: [keyof Synthese, string][] = [
   ["objectifs", "Objectifs"],
@@ -33,6 +35,7 @@ export function reportLabel(report: SessionReport | null): [string, Tone] {
     case "failed":
       return ["Échec", "fail"];
     case "drafted": {
+      if (report.delivery === "failed") return ["Échec Gmail", "fail"];
       const what = report.delivery === "sent" ? "Envoyé" : "Brouillon créé";
       return [`${what} ${report.with_summary ? "avec" : "sans"} compte rendu`, report.with_summary ? "ok" : "off"];
     }
@@ -53,8 +56,10 @@ function details(r: SessionReport): string | null {
     parts.push(`abandon à ${hm(r.waiting_until)}`);
     return parts.join(" · ");
   }
-  if (r.status === "drafted" && r.drafted_at)
-    return `Préparé le ${longDate(r.drafted_at).toLowerCase()} à ${hm(r.drafted_at)}`;
+  if (r.status === "drafted" && r.drafted_at) {
+    const when = `${longDate(r.drafted_at).toLowerCase()} à ${hm(r.drafted_at)}`;
+    return r.delivery === "failed" ? `Tentative le ${when}` : `Préparé le ${when}`;
+  }
   if (r.summary_attempts > 0 && r.status !== "summarizing") return `${r.summary_attempts} tentative(s) de résumé`;
   return null;
 }
@@ -96,10 +101,10 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-slate-900">Comptes rendus de séance</h2>
+      <SectionTitle icon="notebook-pen">Comptes rendus de séance</SectionTitle>
       <p className="mt-1 text-sm text-slate-500">
         {reports.enabled
-          ? "À la fin de chaque séance, la transcription Fireflies est résumée par votre agent Codex, puis l’email au client est préparé en brouillon dans Gmail avec la synthèse et l’infographie."
+          ? "À la fin de chaque séance ou appel découverte, la transcription Fireflies est résumée par votre agent Codex, puis l’email au client est préparé en brouillon dans Gmail avec la synthèse et l’infographie."
           : "Désactivé : sans clé Fireflies ni Codex, l’email de fin de séance est préparé sans compte rendu."}
       </p>
       <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
@@ -116,6 +121,15 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
           </span>
         </span>
       </label>
+      {reports.enabled && (
+        <OtherMeetings
+          onCreated={(message) => {
+            setError(null);
+            setDone(message);
+            onChange();
+          }}
+        />
+      )}
       {done && (
         <div className="mt-3">
           <Alert tone="info">{done}</Alert>
@@ -127,7 +141,7 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
         </div>
       )}
       {reports.sessions.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500">Aucune séance terminée pour le moment.</p>
+        <p className="mt-3 text-sm text-slate-500">Aucun rendez-vous terminé pour le moment.</p>
       ) : (
         <ul aria-label="Séances terminées" className="mt-3 divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">
           {reports.sessions.map((s) => {
@@ -136,23 +150,31 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
             const info = r && details(r);
             const idle = r !== null && (r.status === "waiting_transcript" || r.status === "failed");
             const previewable = r !== null && (r.synthese !== null || r.has_image);
+            const gmailFailed = r !== null && r.status === "drafted" && r.delivery === "failed";
             return (
               <li key={s.booking_id} className="px-5 py-4 text-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="font-medium text-slate-900">{s.customer}</div>
+                    <div className="font-bold text-slate-900">
+                      {s.customer}
+                      {s.kind !== "session" && (
+                        <span className="ml-2 rounded-sm bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                          {s.kind === "discovery" ? "Appel découverte" : "Réunion"}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-slate-500">
                       {longDate(s.start)} · {hm(s.start)} · {s.product}
                     </div>
                   </div>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${TONES[tone]}`}>{label}</span>
+                  <span className={`rounded-sm px-2.5 py-0.5 text-xs font-semibold ${TONES[tone]}`}>{label}</span>
                 </div>
                 {info && <p className="mt-1 text-xs text-slate-500">{info}</p>}
                 {r?.error && <p className="mt-1 text-xs text-red-700">{r.error}</p>}
                 {r?.erased && (
                   <p className="mt-1 text-xs text-slate-500">Compte rendu effacé (durée de conservation écoulée).</p>
                 )}
-                {(previewable || idle) && (
+                {(previewable || idle || gmailFailed) && (
                   <div className="mt-2 flex flex-wrap gap-4">
                     {previewable && (
                       <button
@@ -183,21 +205,35 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                         >
                           {r.transcript_found ? "Relancer le résumé" : "Relancer Fireflies"}
                         </button>
-                        <button
-                          type="button"
-                          disabled={busy === r.id}
-                          className="font-medium text-slate-700 underline disabled:text-slate-400"
-                          onClick={() =>
-                            act(
-                              s,
-                              () => api.adminDraftWithoutSummary(r.id),
-                              `Brouillon sans résumé créé pour ${s.customer}.`,
-                            )
-                          }
-                        >
-                          Créer le brouillon sans résumé
-                        </button>
+                        {s.kind !== "meeting" && (
+                          <button
+                            type="button"
+                            disabled={busy === r.id}
+                            className="font-medium text-slate-700 underline disabled:text-slate-400"
+                            onClick={() =>
+                              act(
+                                s,
+                                () => api.adminDraftWithoutSummary(r.id),
+                                `Brouillon sans résumé créé pour ${s.customer}.`,
+                              )
+                            }
+                          >
+                            Créer le brouillon sans résumé
+                          </button>
+                        )}
                       </>
+                    )}
+                    {gmailFailed && (
+                      <button
+                        type="button"
+                        disabled={busy === r.id}
+                        className="font-medium text-brand-600 underline disabled:text-slate-400"
+                        onClick={() =>
+                          act(s, () => api.adminRetryReportEmail(r.id), `Brouillon de ${s.customer} recréé dans Gmail.`)
+                        }
+                      >
+                        Recréer le brouillon
+                      </button>
                     )}
                   </div>
                 )}
@@ -225,7 +261,7 @@ function Preview({ session, report }: { session: FinishedSession; report: Sessio
         <div className="space-y-3">
           {SECTIONS.filter(([key]) => report.synthese![key].length > 0).map(([key, title]) => (
             <div key={key}>
-              <h3 className="font-semibold text-brand-700">{title}</h3>
+              <h3 className="font-bold text-brand-700">{title}</h3>
               <ul className="mt-1 list-disc space-y-0.5 pl-5 text-slate-700">
                 {report.synthese![key].map((item, i) => (
                   <li key={i}>{item}</li>

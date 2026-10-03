@@ -3,7 +3,7 @@ import threading
 
 import pytest
 
-from tests.conftest import ADMIN_PASSWORD, NOW, paris
+from tests.conftest import staff_login, ADMIN_PASSWORD, NOW, paris
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -312,7 +312,7 @@ def test_partial_refund_keeps_access(client, fakes, token_for):
 
 
 def test_admin_requires_login(client):
-    assert client.get("/api/admin/overview").status_code == 401
+    assert client.get("/api/consultant/overview").status_code == 401
     assert client.post("/api/admin/login", json={"password": "wrong"}).status_code == 401
 
 
@@ -321,8 +321,8 @@ def test_admin_overview(client, token_for):
     token_for("cs_test_2", hours=2, email="marie@example.com", name="Marie Martin")
     client.post("/api/bookings", json={"token": t5, "start": SLOT.isoformat()})
 
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
-    data = client.get("/api/admin/overview").json()
+    staff_login(client)
+    data = client.get("/api/consultant/overview").json()
     k = data["kpis"]
     assert k["hours_sold"] == 7
     assert k["hours_booked"] == 1

@@ -266,6 +266,8 @@ def test_booking_context_payload(client, token_for):
         "timezone": "Europe/Paris",
         "booking_duration_min": 60,
         "locale": "fr",
+        "nda_available": False,
+        "nda_sent": False,
     }
 
 # --- the database is the source of truth while Google free/busy lags -----------------------

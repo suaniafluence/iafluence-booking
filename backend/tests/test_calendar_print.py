@@ -9,7 +9,7 @@ from reportlab.pdfgen.canvas import Canvas
 from app.services import calendar_print as cp
 from app.services.availability import Interval
 from app.services.calendar_service import BusyEvent, CalendarUnavailable
-from tests.conftest import ADMIN_PASSWORD, PARIS, paris
+from tests.conftest import staff_login, ADMIN_PASSWORD, PARIS, paris
 
 
 def iv(d1, h1, d2, h2, m1=0, m2=0) -> Interval:
@@ -240,10 +240,10 @@ def test_fit_shortens_text_to_the_width():
 
 
 def login(client):
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
+    staff_login(client)
 
 
-URL = "/api/admin/calendar.pdf?start=2026-10-05&end=2026-10-18"
+URL = "/api/consultant/calendar.pdf?start=2026-10-05&end=2026-10-18"
 
 
 def test_calendar_pdf_requires_the_admin_session(client):
@@ -284,7 +284,7 @@ def test_calendar_pdf_prints_every_enabled_calendar(client, fakes, drawn):
 )
 def test_calendar_pdf_rejects_bad_periods(client, query, message):
     login(client)
-    r = client.get(f"/api/admin/calendar.pdf?{query}")
+    r = client.get(f"/api/consultant/calendar.pdf?{query}")
     assert r.status_code == 422 and r.json()["detail"] == message
 
 
@@ -292,7 +292,7 @@ def test_calendar_pdf_accepts_the_longest_period(client):
     login(client)
     start = date(2026, 10, 5)
     end = start + timedelta(days=cp.MAX_DAYS - 1)
-    assert client.get(f"/api/admin/calendar.pdf?start={start}&end={end}").status_code == 200
+    assert client.get(f"/api/consultant/calendar.pdf?start={start}&end={end}").status_code == 200
 
 
 def test_calendar_pdf_when_a_calendar_is_down(client, fakes):

@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <Layout>
       <Card>
-        <h1 className="text-xl font-semibold text-slate-900">{t.notFound.title}</h1>
+        <h1 className="text-xl font-extrabold text-slate-900">{t.notFound.title}</h1>
         <p className="mt-2 text-slate-600">
           {t.notFound.body(
             <a className="text-brand-600 underline" href="https://iafluence.fr">

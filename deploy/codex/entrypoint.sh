@@ -4,7 +4,8 @@
 # - The app-server binds to localhost because Codex refuses non-loopback WebSocket listeners. A TCP relay exposes it
 #   only on the container's private Docker network; clients must still present CODEX_WS_TOKEN.
 # - The agent only writes text: shell, apps, plugins, browser, web search and image tools are off, so a transcript
-#   cannot make it run anything. Threads are ephemeral and history is off: no prompt (hence no transcript) is kept.
+#   cannot make it run anything. Web search is turned on by the API for one thread only (thread/start config), for
+#   the public research about a company in the cockpit: that prompt never carries a transcript. Threads are ephemeral and history is off: no prompt (hence no transcript) is kept.
 set -eu
 
 : "${CODEX_WS_TOKEN:?CODEX_WS_TOKEN is missing (deploy/.env)}"

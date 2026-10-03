@@ -6,8 +6,10 @@ from functools import lru_cache
 from app.config import get_config
 from app.services.calendar_service import CalendarGateway, GoogleCalendarGateway
 from app.services.codex import CodexGateway, LiveCodex
+from app.services.company import CompanyRegister, LiveCompanyRegister
 from app.services.email_service import GmailMailer, Mailer
 from app.services.fireflies import FirefliesGateway, LiveFireflies
+from app.services.google_sso import LiveGoogleSso, SsoGateway
 from app.services.stripe_service import LiveStripeGateway, StripeGateway
 
 
@@ -56,6 +58,24 @@ def get_codex() -> CodexGateway:
 
         return DemoCodex()
     return LiveCodex()
+
+
+@lru_cache
+def get_sso() -> SsoGateway:
+    if get_config().fake_integrations:
+        from app.dev_fakes import DemoSso
+
+        return DemoSso()
+    return LiveGoogleSso()
+
+
+@lru_cache
+def get_company_register() -> CompanyRegister:
+    if get_config().fake_integrations:
+        from app.dev_fakes import DemoCompanyRegister
+
+        return DemoCompanyRegister()
+    return LiveCompanyRegister()
 
 
 def get_now() -> datetime:

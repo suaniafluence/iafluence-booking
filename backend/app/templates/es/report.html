@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resumen</title>
+</head>
+<body style="margin:0;padding:0;background:#f8fafc;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;font-family:Arial,Helvetica,sans-serif;color:#1e293b;font-size:15px;line-height:1.55;">
+<tr><td style="padding:28px 28px 8px;">
+<p style="margin:0 0 16px;">Hola, {{ name }}:</p>
+{% if kind == "discovery" %}
+<p style="margin:0 0 20px;">Gracias por nuestra llamada de descubrimiento del {{ date_long }}. Aquí tiene el resumen de lo que hablamos.</p>
+{% else %}
+<p style="margin:0 0 20px;">Gracias por nuestra reunión del {{ date_long }}. Aquí tiene el resumen.</p>
+{% endif %}
+</td></tr>
+{% if image_cid %}
+<tr><td style="padding:0 28px 8px;">
+<img src="cid:{{ image_cid }}" alt="Infografía de nuestra conversación" width="544" style="display:block;width:100%;max-width:544px;height:auto;border-radius:12px;border:1px solid #e0e7ff;">
+</td></tr>
+{% endif %}
+{% for title, items in sections %}
+<tr><td style="padding:12px 28px 0;">
+<h2 style="margin:0 0 6px;font-size:16px;color:#4338ca;">{{ title }}</h2>
+<ul style="margin:0;padding-left:20px;">
+{% for item in items %}
+<li style="margin:0 0 4px;">{{ item }}</li>
+{% endfor %}
+</ul>
+</td></tr>
+{% endfor %}
+<tr><td style="padding:20px 28px 0;">
+{% if kind == "discovery" %}
+<p style="margin:0 0 12px;">Si desea ir más allá, puede consultar nuestros acompañamientos de asesoría en IA aquí:</p>
+<p style="margin:0 0 12px;"><a href="{{ shop_url }}" style="display:inline-block;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:10px;">Ver los acompañamientos</a></p>
+<p style="margin:0 0 20px;">También puede responder a este correo para hablarlo.</p>
+{% endif %}
+</td></tr>
+<tr><td style="padding:0 28px 28px;">
+<p style="margin:0;">Un saludo,</p>
+<p style="margin:12px 0 0;">{{ consultant_name }}<br>IAfluence</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

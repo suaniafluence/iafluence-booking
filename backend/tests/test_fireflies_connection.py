@@ -8,7 +8,7 @@ from app.db import SessionLocal
 from app.services import fireflies_account, session_reports
 from app.services.fireflies import FirefliesError, LiveFireflies
 from app.services.settings_service import get_settings
-from tests.conftest import ADMIN_PASSWORD, NOW
+from tests.conftest import staff_login, ADMIN_PASSWORD, NOW
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -25,7 +25,7 @@ def codex_only(monkeypatch):
 
 @pytest.fixture
 def admin(client):
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
+    staff_login(client)
     return client
 
 
@@ -41,7 +41,7 @@ def reports_enabled():
 
 def test_connect_checks_the_key_and_stores_it_encrypted(admin, fakes):
     assert admin.get("/api/admin/fireflies").json() == DISCONNECTED
-    assert admin.get("/api/admin/overview").json()["reports"]["enabled"] is False
+    assert admin.get("/api/consultant/overview").json()["reports"]["enabled"] is False
     assert reports_enabled() is False
 
     r = admin.post("/api/admin/fireflies", json={"api_key": f"  {KEY}\n"})
@@ -52,7 +52,7 @@ def test_connect_checks_the_key_and_stores_it_encrypted(admin, fakes):
     assert stored() and KEY not in stored()
     assert fireflies_account.current_key() == KEY
     assert reports_enabled() is True
-    assert admin.get("/api/admin/overview").json()["reports"]["enabled"] is True
+    assert admin.get("/api/consultant/overview").json()["reports"]["enabled"] is True
 
 
 def test_refused_key_keeps_the_current_connection(admin):

@@ -29,6 +29,18 @@ class Customer(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True)
     # End of session: send the next-session link directly, or leave it as a Gmail draft (default) to add notes.
     auto_send_next_link: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
+    # Confidentiality agreement (app.services.nda): emailed signed by the consultant, returned signed by the
+    # customer in reply (the admin ticks it off).
+    nda_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    nda_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # V3 cockpit. The consultant who follows this customer (one today: the platform is ready for several).
+    consultant_id: Mapped[int | None] = mapped_column(ForeignKey("staff_users.id", ondelete="SET NULL"), index=True)
+    company_name: Mapped[str | None] = mapped_column(String(255))
+    siren: Mapped[str | None] = mapped_column(String(9))
+    # Private notes of the consultant, never shown to the customer; given to the action plan agent.
+    notes: Mapped[str | None] = mapped_column(Text)
+    # Inactivity reminder (app.services.reminders): at most one per period of inactivity.
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     purchases: Mapped[list["Purchase"]] = relationship(back_populates="customer")
@@ -78,10 +90,17 @@ class BookingToken(Base):
 
 
 class Booking(Base):
+    """A paid consulting session (`session`), a free discovery call booked on /decouverte (`discovery`), or a
+    meeting booked elsewhere whose Fireflies recording the admin chose to summarize (`meeting`).
+
+    Only sessions belong to a purchase. The others carry the customer's language and time zone themselves.
+    """
+
     __tablename__ = "bookings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    purchase_id: Mapped[int] = mapped_column(ForeignKey("purchases.id"))
+    kind: Mapped[str] = mapped_column(String(16), server_default="session", default="session")
+    purchase_id: Mapped[int | None] = mapped_column(ForeignKey("purchases.id"))
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
     start_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     end_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -89,13 +108,36 @@ class Booking(Base):
     meet_url: Mapped[str | None] = mapped_column(String(512))
     # confirmed (upcoming) -> completed once it has ended (app.services.follow_up) | cancelled
     status: Mapped[str] = mapped_column(String(32))
+    # Meeting: its Fireflies title. Discovery and meeting: the customer's language and browser time zone.
+    title: Mapped[str | None] = mapped_column(String(255))
+    locale: Mapped[str | None] = mapped_column(String(5))
+    customer_timezone: Mapped[str | None] = mapped_column(String(64))
+    # Discovery: what the prospect wants to talk about (typed on /decouverte), for the action plan.
+    message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    purchase: Mapped[Purchase] = relationship(back_populates="bookings")
+    purchase: Mapped[Purchase | None] = relationship(back_populates="bookings")
     customer: Mapped[Customer] = relationship()
+
+    @property
+    def client_locale(self) -> str:
+        return self.purchase.locale if self.purchase else (self.locale or "fr")
+
+    @property
+    def client_timezone(self) -> str | None:
+        return self.purchase.customer_timezone if self.purchase else self.customer_timezone
 
     __table_args__ = (
         CheckConstraint("start_datetime < end_datetime", name="booking_interval_order"),
+        CheckConstraint("kind IN ('session', 'discovery', 'meeting')", name="booking_kind"),
+        CheckConstraint("(kind = 'session') = (purchase_id IS NOT NULL)", name="booking_purchase_iff_session"),
+        # One upcoming discovery call per person (email).
+        Index(
+            "uq_bookings_one_discovery_per_customer",
+            "customer_id",
+            unique=True,
+            postgresql_where=text("kind = 'discovery' AND status = 'confirmed'"),
+        ),
         # R03 — one upcoming session per purchase: finished ones move to 'completed', freeing the next.
         Index(
             "uq_bookings_one_confirmed_per_purchase",
@@ -137,7 +179,8 @@ class SessionReport(Base):
     image_png: Mapped[bytes | None] = mapped_column(LargeBinary)
     # Short reason shown in the admin — never transcript content.
     error: Mapped[str | None] = mapped_column(Text)
-    # How the client email went out: draft | sent; with_summary tells whether it carried the summary.
+    # How the client email went out: draft | sent | failed (Gmail refused it); with_summary tells whether it
+    # carried the summary.
     delivery: Mapped[str | None] = mapped_column(String(16))
     with_summary: Mapped[bool | None] = mapped_column(Boolean)
     drafted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -153,6 +196,13 @@ class SessionReport(Base):
             "status IN ('waiting_transcript', 'summarizing', 'ready', 'drafted', 'failed')", name="report_status"
         ),
         Index("ix_session_reports_status_next_attempt", "status", "next_attempt_at"),
+        # A recording is summarized once, whether matched to a session or picked by the admin.
+        Index(
+            "uq_session_reports_transcript",
+            "fireflies_transcript_id",
+            unique=True,
+            postgresql_where=text("fireflies_transcript_id IS NOT NULL"),
+        ),
     )
 
 
@@ -218,6 +268,30 @@ class Settings(Base):
     fireflies_email: Mapped[str | None] = mapped_column(String(320))
     fireflies_name: Mapped[str | None] = mapped_column(String(255))
     fireflies_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Free discovery call (/decouverte): same weekly hours, notice and buffers as the sessions.
+    discovery_enabled: Mapped[bool] = mapped_column(Boolean, server_default="true", default=True)
+    discovery_duration_min: Mapped[int] = mapped_column(Integer, server_default="30", default=30)
+    # Inactivity (app.services.reminders, app.services.learners): a reminder after `reminder_after_days` without a
+    # session (Gmail draft unless `reminder_auto_send`), hidden from the cockpit after `hide_after_days`.
+    reminder_enabled: Mapped[bool] = mapped_column(Boolean, server_default="true", default=True)
+    reminder_after_days: Mapped[int] = mapped_column(Integer, server_default="21", default=21)
+    reminder_auto_send: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
+    hide_after_days: Mapped[int] = mapped_column(Integer, server_default="60", default=60)
+
+
+class NdaDocument(Base):
+    """The confidentiality agreement already signed by the consultant, one PDF per customer language.
+
+    French is the reference: a customer whose language has no PDF of its own receives it."""
+
+    __tablename__ = "nda_documents"
+
+    locale: Mapped[str] = mapped_column(String(5), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    pdf: Mapped[bytes] = mapped_column(LargeBinary)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (CheckConstraint("locale IN ('fr', 'en', 'es')", name="nda_locale"),)
 
 
 class AvailabilityRule(Base):
@@ -241,3 +315,96 @@ class StripeEvent(Base):
     type: Mapped[str] = mapped_column(String(128))
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class StaffUser(Base):
+    """Someone who signs in with Google: admin (configuration) and/or consultant (cockpit).
+
+    The same email may hold both roles, but each role has its own session (app.auth). Only listed, active addresses
+    with a verified Google email get in; the Google account id (`sub`) is bound at the first sign-in."""
+
+    __tablename__ = "staff_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True)
+    name: Mapped[str] = mapped_column(String(255), server_default="", default="")
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
+    is_consultant: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
+    active: Mapped[bool] = mapped_column(Boolean, server_default="true", default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("is_admin OR is_consultant", name="staff_has_role"),
+        CheckConstraint("email = lower(email)", name="staff_email_lower"),
+    )
+
+    def has_role(self, role: str) -> bool:
+        return self.active and (self.is_admin if role == "admin" else self.is_consultant)
+
+
+class CustomerProfile(Base):
+    """What the consultant knows about the customer's company: the official register (app.services.company) and a
+    web research by Codex (app.services.research). Public information only."""
+
+    __tablename__ = "customer_profiles"
+
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), primary_key=True)
+    company: Mapped[dict | None] = mapped_column(JSONB)
+    company_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    research: Mapped[dict | None] = mapped_column(JSONB)
+    # running -> ready | failed
+    research_status: Mapped[str | None] = mapped_column(String(16))
+    research_error: Mapped[str | None] = mapped_column(Text)
+    research_claimed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    research_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("research_status IN ('running', 'ready', 'failed')", name="profile_research_status"),
+    )
+
+
+class ActionPlan(Base):
+    """The consultant's action plan for a customer: written by Codex once the customer buys hours after a discovery
+    call (or on demand), then refined by chat. One per customer, rewritten in place (`version`).
+
+    pending -> generating -> ready | failed; a chat message moves the plan back to pending."""
+
+    __tablename__ = "action_plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), unique=True)
+    consultant_id: Mapped[int | None] = mapped_column(ForeignKey("staff_users.id", ondelete="SET NULL"))
+    purchase_id: Mapped[int | None] = mapped_column(ForeignKey("purchases.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(16))
+    # Held by the process running the Codex turn (minutes: no row lock meanwhile).
+    claimed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    content: Mapped[dict | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    customer: Mapped[Customer] = relationship()
+    messages: Mapped[list["ActionPlanMessage"]] = relationship(
+        order_by="ActionPlanMessage.id", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'generating', 'ready', 'failed')", name="action_plan_status"),
+        Index("ix_action_plans_status", "status"),
+    )
+
+
+class ActionPlanMessage(Base):
+    __tablename__ = "action_plan_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("action_plans.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(16))  # consultant | assistant
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (CheckConstraint("role IN ('consultant', 'assistant')", name="plan_message_role"),)

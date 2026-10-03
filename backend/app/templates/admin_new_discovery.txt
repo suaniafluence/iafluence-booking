@@ -1,0 +1,25 @@
+Prospect :
+{{ name }}
+
+Email :
+{{ email }}
+
+Rendez-vous :
+{{ date_short }}
+{{ hour_range }}
+{% if meet_url %}
+Visio :
+{{ meet_url }}
+{% endif %}
+Langue :
+{{ locale }}
+{% if message %}
+
+Sujet indiqué :
+{{ message }}
+{% endif %}
+{% if nda %}
+
+NDA :
+Demandé par le client (envoyé automatiquement s'il ne l'avait pas déjà reçu). À son retour signé, cochez « Signé reçu » dans l'admin, section « Accord de confidentialité ».
+{% endif %}

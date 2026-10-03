@@ -1,0 +1,14 @@
+Bonjour {{ name }},
+
+Merci encore pour notre appel découverte. Avez-vous pu avancer sur les pistes d'IA dont nous avions parlé ?
+
+Si vous voulez passer à l'action ensemble, les heures de conseil se réservent ici :
+
+{{ shop_url }}
+
+Une question avant de vous décider ? Répondez simplement à cet email.
+
+À bientôt,
+
+{{ consultant_name }}
+IAfluence
