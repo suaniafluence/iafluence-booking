@@ -12,7 +12,7 @@ from app.models import Booking, Customer, SessionReport, Settings
 from app.services import session_reports
 from app.services.fireflies import FirefliesError, Sentence
 from app.services.session_reports import Gateways
-from tests.conftest import ADMIN_PASSWORD, NOW, paris
+from tests.conftest import staff_login, ADMIN_PASSWORD, NOW, paris
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -31,7 +31,7 @@ def reports_on(monkeypatch):
 
 @pytest.fixture
 def admin(client):
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
+    staff_login(client)
     main.app.dependency_overrides[deps.get_now] = lambda: LATER
     return client
 
@@ -51,7 +51,7 @@ def ask(admin, **kw):
         "email": GUEST,
         "locale": "fr",
     } | kw
-    return admin.post("/api/admin/meetings", json=body)
+    return admin.post("/api/consultant/meetings", json=body)
 
 
 def report() -> SessionReport:
@@ -69,7 +69,7 @@ def test_recent_recordings_newest_first_without_the_admin(admin, fakes, token_fo
     ff.add("ff_jean", NOW - timedelta(days=2), ("suan@iafluence.fr", "inconnu@example.com", "jean@example.com"), title="Suivi Jean")
     ff.add("ff_ext", MEETING, (GUEST, "admin@iafluence.test"), title="Point projet - Exemple SAS", duration_min=45)
     ff.add("ff_solo", MEETING - timedelta(hours=1), ("suan@iafluence.fr",))
-    r = admin.get("/api/admin/meetings")
+    r = admin.get("/api/consultant/meetings")
     assert r.status_code == 200, r.text
     assert r.json()["meetings"] == [
         {
@@ -111,25 +111,25 @@ def test_recent_recordings_newest_first_without_the_admin(admin, fakes, token_fo
 def test_a_recording_already_summarized_shows_its_report(admin, fakes):
     fakes["fireflies"].add("ff_ext", MEETING, (GUEST,))
     assert ask(admin).status_code == 201
-    [m] = admin.get("/api/admin/meetings").json()["meetings"]
+    [m] = admin.get("/api/consultant/meetings").json()["meetings"]
     assert m["report_id"] == report().id
 
 
 def test_listing_needs_reports_on(admin, monkeypatch):
     monkeypatch.setattr(get_config(), "fireflies_api_key", "")
-    assert admin.get("/api/admin/meetings").status_code == 409
+    assert admin.get("/api/consultant/meetings").status_code == 409
     assert ask(admin).status_code == 409
 
 
 def test_fireflies_down(admin, fakes):
     fakes["fireflies"].fail = FirefliesError("quota de l'API Fireflies atteint")
-    r = admin.get("/api/admin/meetings")
+    r = admin.get("/api/consultant/meetings")
     assert (r.status_code, r.json()["detail"]) == (502, "Fireflies ne répond pas : quota de l'API Fireflies atteint.")
 
 
 def test_admin_only(client):
-    assert client.get("/api/admin/meetings").status_code == 401
-    assert client.post("/api/admin/meetings", json={}).status_code == 401
+    assert client.get("/api/consultant/meetings").status_code == 401
+    assert client.post("/api/consultant/meetings", json={}).status_code == 401
 
 
 # --- report ------------------------------------------------------------------------------------------------------
@@ -165,13 +165,13 @@ def test_report_is_summarized_and_always_left_as_a_draft(admin, fakes, gw):
     assert draft["images"]
     assert (report().status, report().delivery, report().with_summary) == ("drafted", "draft", True)
 
-    [row] = admin.get("/api/admin/overview").json()["reports"]["sessions"]
+    [row] = admin.get("/api/consultant/overview").json()["reports"]["sessions"]
     assert (row["kind"], row["product"], row["customer"]) == ("meeting", "Point projet - Exemple SAS", "Claire Martin")
 
 
 def test_untitled_meeting_is_listed_as_a_meeting(admin, fakes):
     assert ask(admin, title=None).status_code == 201
-    [row] = admin.get("/api/admin/overview").json()["reports"]["sessions"]
+    [row] = admin.get("/api/consultant/overview").json()["reports"]["sessions"]
     assert row["product"] == "Réunion"
 
 
@@ -207,7 +207,7 @@ def test_no_email_without_a_summary(admin, fakes, gw):
     fakes["fireflies"].add("ff_ext", MEETING, (GUEST,), sentences=[])
     assert ask(admin).status_code == 201
     session_reports.process(gw, LATER)
-    r = admin.post(f"/api/admin/reports/{report().id}/draft-without-summary")
+    r = admin.post(f"/api/consultant/reports/{report().id}/draft-without-summary")
     assert r.status_code == 409
     session_reports.process(gw, LATER + timedelta(hours=7))
     assert report().status == "failed"

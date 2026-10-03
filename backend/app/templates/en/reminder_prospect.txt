@@ -1,0 +1,14 @@
+Hello {{ name }},
+
+Thank you again for our discovery call. Have you been able to move forward with the AI ideas we discussed?
+
+If you would like to work on them together, consulting hours can be booked here:
+
+{{ shop_url }}
+
+Any question before deciding? Just reply to this email.
+
+Best regards,
+
+{{ consultant_name }}
+IAfluence

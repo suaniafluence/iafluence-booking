@@ -155,3 +155,45 @@ class NdaSendIn(BaseModel):
 
 class NdaSignedIn(BaseModel):
     signed: bool
+
+
+# --- V3: staff accounts, settings, consultant cockpit ---------------------------------------------------------
+
+
+class StaffUserIn(BaseModel):
+    email: EmailStr
+    name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] = ""
+    is_admin: bool = False
+    is_consultant: bool = True
+
+
+class StaffUserPatchIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None
+    is_admin: bool | None = None
+    is_consultant: bool | None = None
+    active: bool | None = None
+    unlink_google: bool = False
+
+
+class PlatformSettingsIn(BaseModel):
+    reminder_enabled: bool | None = None
+    reminder_after_days: int | None = Field(None, ge=1, le=365)
+    reminder_auto_send: bool | None = None
+    hide_after_days: int | None = Field(None, ge=2, le=730)
+
+
+class LearnerPatchIn(BaseModel):
+    company_name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None
+    notes: Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000)] | None = None
+
+
+class CompanyAttachIn(BaseModel):
+    siren: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{9}$")]
+
+
+class PlanMessageIn(BaseModel):
+    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+
+
+class PlanValidateIn(BaseModel):
+    validated: bool

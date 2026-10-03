@@ -25,7 +25,7 @@ describe("NdaAgreement", () => {
     render(<NdaAgreement />);
     expect(screen.getByRole("heading", { name: "Accord de confidentialité (NDA)" })).toBeInTheDocument();
     const link = await screen.findByRole("link", { name: "NDA-IAfluence.pdf" });
-    expect(link).toHaveAttribute("href", "/api/admin/nda/documents/fr.pdf");
+    expect(link).toHaveAttribute("href", "/api/consultant/nda/documents/fr.pdf");
     expect(within(row("English")).getByText("Aucun PDF : le français est envoyé.")).toBeInTheDocument();
     expect(within(row("Français")).getByText("Remplacer")).toBeInTheDocument();
     expect(within(row("English")).getByText("Téléverser le PDF")).toBeInTheDocument();

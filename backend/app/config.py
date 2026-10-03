@@ -25,9 +25,18 @@ class Config(BaseSettings):
     mail_from: str = ""
     mail_from_name: str = "Suan Tay — IAfluence"
 
+    # Google sign-in of the staff (admin and consultants, app.auth): an OAuth client of type « Web application »
+    # whose authorized redirect URI is {PUBLIC_BASE_URL}/api/auth/google/callback. Empty = the client above.
+    google_sso_client_id: str = ""
+    google_sso_client_secret: str = ""
+
+    # Fallback sign-in of the admin only (the consultant cockpit is Google-only). Empty = off.
     admin_password_hash: str = ""
     session_secret: str = "change-me"
     cookie_secure: bool = True
+
+    # Official register of French companies (free, no key): company profile in the cockpit (app.services.company).
+    company_api_url: str = "https://recherche-entreprises.api.gouv.fr"
 
     # End-of-session job: how often finished sessions are closed and the next-session link emailed. 0 = off.
     follow_up_poll_seconds: int = 60
@@ -57,6 +66,18 @@ class Config(BaseSettings):
     def codex_enabled(self) -> bool:
         """« Connexion Codex » only needs the codex app-server: the ChatGPT account can be linked before Fireflies."""
         return self.fake_integrations or bool(self.codex_app_server_url)
+
+    @property
+    def sso_client_id(self) -> str:
+        return self.google_sso_client_id or self.google_client_id
+
+    @property
+    def sso_client_secret(self) -> str:
+        return self.google_sso_client_secret or self.google_client_secret
+
+    @property
+    def sso_enabled(self) -> bool:
+        return self.fake_integrations or bool(self.sso_client_id and self.sso_client_secret)
 
     @property
     def allowed_product_ids(self) -> set[str]:

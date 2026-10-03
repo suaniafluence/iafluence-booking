@@ -283,6 +283,8 @@ def test_run_turn_returns_the_last_agent_message(server, monkeypatch):
         "ephemeral": True,
         "developerInstructions": "Consignes",
         "serviceName": "iafluence_booking",
+        # A transcript turn never searches the web.
+        "config": {"web_search": "disabled"},
     }
     assert server.params("turn/start") == {
         "threadId": "thr-1",
@@ -292,6 +294,12 @@ def test_run_turn_returns_the_last_agent_message(server, monkeypatch):
     # A server request (approval) is refused, never granted.
     [reply] = [m for m in server.received if m.get("id") == 99]
     assert reply == {"id": 99, "error": {"code": -32601, "message": "not supported by this client"}}
+
+
+def test_web_search_is_turned_on_for_that_thread_only(server):
+    scripted_turn(server)
+    LiveCodex().run_turn(instructions="i", prompt="p", output_schema={}, web_search=True)
+    assert server.params("thread/start")["config"] == {"web_search": "live"}
 
 
 def test_default_model_is_left_to_codex(server):

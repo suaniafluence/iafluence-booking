@@ -12,7 +12,7 @@ from app.routers import public
 from app.services import follow_up, session_reports
 from app.services.rate_limit import RateLimiter
 from app.services.session_reports import Gateways
-from tests.conftest import ADMIN_PASSWORD, NOW, paris
+from tests.conftest import staff_login, ADMIN_PASSWORD, NOW, paris
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -209,11 +209,11 @@ def test_invalid_forms(client, body):
 
 def test_admin_sees_and_cancels_the_call(client, fakes):
     assert book(client).status_code == 201
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
-    [upcoming] = client.get("/api/admin/overview").json()["upcoming"]
+    staff_login(client)
+    [upcoming] = client.get("/api/consultant/overview").json()["upcoming"]
     assert (upcoming["kind"], upcoming["product"], upcoming["customer"]) == ("discovery", "Appel découverte", "Paul Prospect")
     fakes["mailer"].sent.clear()
-    r = client.post(f"/api/admin/bookings/{upcoming['booking_id']}/cancel", json={"notify": True})
+    r = client.post(f"/api/consultant/bookings/{upcoming['booking_id']}/cancel", json={"notify": True})
     assert r.json() == {"status": "cancelled"}
     assert fakes["calendar"].deleted == ["evt_1"]
     assert fakes["mailer"].sent == []

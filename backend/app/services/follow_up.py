@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.models import Booking
-from app.services import notifications, session_reports
+from app.services import notifications, reminders, session_reports
 from app.services.email_service import Mailer
 
 log = logging.getLogger(__name__)
@@ -83,10 +83,22 @@ def process_finished_sessions(mailer: Mailer, now: datetime) -> int:
     return len(to_notify) + len(to_thank) + len(to_thank_prospect) + reports
 
 
+# Inactivity reminders are counted in days: once an hour is plenty.
+REMINDERS_EVERY = timedelta(hours=1)
+
+
 async def run_forever(mailer_factory: Callable[[], Mailer], interval_s: float) -> None:
+    last_reminders: datetime | None = None
     while True:
+        now = datetime.now(UTC)
         try:
-            await asyncio.to_thread(process_finished_sessions, mailer_factory(), datetime.now(UTC))
+            await asyncio.to_thread(process_finished_sessions, mailer_factory(), now)
         except Exception:
             log.exception("end-of-session job failed")
+        if last_reminders is None or now - last_reminders >= REMINDERS_EVERY:
+            last_reminders = now
+            try:
+                await asyncio.to_thread(reminders.process, mailer_factory(), now)
+            except Exception:
+                log.exception("inactivity reminder job failed")
         await asyncio.sleep(interval_s)

@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import { ADMIN_PASSWORD } from "./env.mjs";
 import { customerEmail, customerName, newCustomer } from "./helpers";
 
-test("l'administrateur se connecte, suit les clients et se déconnecte", async ({ page, request }) => {
+
+test("le consultant se connecte avec Google, suit les clients et se déconnecte", async ({ page, request }) => {
   // A customer who paid 2 h and booked the first session (through the public API).
   const who = newCustomer();
   const { token } = await (await request.get(`/api/checkout/cs_demo_2h_${who}`)).json();
@@ -10,19 +11,15 @@ test("l'administrateur se connecte, suit les clients et se déconnecte", async (
   const booked = await request.post("/api/bookings", { data: { token, start: slots[0].start } });
   expect(booked.status()).toBe(201);
 
-  await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
-  const password = page.getByLabel("Mot de passe");
-  const submit = page.getByRole("button", { name: "Se connecter" });
-  await expect(submit).toBeDisabled();
-
-  await password.fill("mauvais");
-  await submit.click();
-  await expect(page.getByRole("alert")).toHaveText("Mot de passe incorrect.");
-
-  await password.fill(ADMIN_PASSWORD);
-  await submit.click();
-  await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
+  // The base URL offers the two areas.
+  await page.goto("/");
+  await page.getByRole("link", { name: /Espace consultant/ }).click();
+  await expect(page.getByRole("heading", { name: "Espace consultant" })).toBeVisible();
+  // No password for the cockpit: Google only.
+  await expect(page.getByLabel("Mot de passe de secours")).toHaveCount(0);
+  await page.getByRole("link", { name: "Se connecter avec Google" }).click();
+  await expect(page.getByRole("heading", { name: "Cockpit consultant" })).toBeVisible();
+  await expect(page.getByRole("link").filter({ hasText: customerName(who) })).toContainText("2 séances restantes");
 
   const row = page.getByRole("row").filter({ hasText: customerEmail(who) });
   await expect(row.getByRole("cell")).toHaveText([
@@ -35,7 +32,8 @@ test("l'administrateur se connecte, suit les clients et se déconnecte", async (
     "",
     "Copier le lien",
   ]);
-  await expect(page.getByRole("listitem").filter({ hasText: customerName(who) })).toBeVisible();
+  const upcoming = page.locator("section").filter({ has: page.getByRole("heading", { name: "Prochains rendez-vous" }) });
+  await expect(upcoming.getByRole("listitem").filter({ hasText: customerName(who) })).toBeVisible();
 
   // Next-session link: drafted by default, sent automatically once ticked — the choice is saved.
   const autoSend = page.getByRole("checkbox", { name: `Envoi automatique pour ${customerName(who)}` });
@@ -46,7 +44,7 @@ test("l'administrateur se connecte, suit les clients et se déconnecte", async (
   // A client who paid outside the website, added by hand.
   const manual = newCustomer();
   await page.getByRole("button", { name: "Ajouter un client" }).click();
-  await page.getByLabel("Nom").fill(customerName(manual));
+  await page.getByLabel("Nom", { exact: true }).fill(customerName(manual));
   await page.getByLabel("Email", { exact: true }).fill(customerEmail(manual));
   await page.getByLabel("Heures achetées").fill("3");
   await page.getByLabel("Montant payé (€)").fill("300");
@@ -58,7 +56,7 @@ test("l'administrateur se connecte, suit les clients et se déconnecte", async (
 
   // The session cookie survives a reload.
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Cockpit consultant" })).toBeVisible();
   await expect(autoSend).toBeChecked();
 
   // Moving the session: cancelled from the admin, the hour goes back to the client.
@@ -71,8 +69,25 @@ test("l'administrateur se connecte, suit les clients et se déconnecte", async (
   await expect(page.getByRole("button", { name: `Annuler la séance de ${customerName(who)}` })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Déconnexion" }).click();
-  await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Espace consultant" })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
-  expect((await request.get("/api/admin/overview")).status()).toBe(401);
+  await expect(page.getByRole("heading", { name: "Espace consultant" })).toBeVisible();
+  expect((await request.get("/api/consultant/overview")).status()).toBe(401);
+});
+
+test("l'administrateur se connecte avec le mot de passe de secours, pas au cockpit", async ({ page }) => {
+  await page.goto("/admin");
+  const password = page.getByLabel("Mot de passe de secours");
+  const submit = page.getByRole("button", { name: "Se connecter" });
+  await expect(submit).toBeDisabled();
+  await password.fill("mauvais");
+  await submit.click();
+  await expect(page.getByRole("alert")).toHaveText("Mot de passe incorrect.");
+  await password.fill(ADMIN_PASSWORD);
+  await submit.click();
+  await expect(page.getByRole("heading", { name: "Comptes et rôles" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Relances et inactivité" })).toBeVisible();
+  // Each area has its own session: the admin password does not open the cockpit.
+  await page.goto("/consultant");
+  await expect(page.getByRole("heading", { name: "Espace consultant" })).toBeVisible();
 });

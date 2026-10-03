@@ -146,15 +146,20 @@ def check_svg(svg: str) -> None:
         raise ValueError("SVG refusé : proportions hors limites")
 
 
-def parse_output(text: str) -> ReportOutput:
+def parse_model[M: BaseModel](text: str, model: type[M]) -> M:
+    """A Codex answer validated against `model`; InvalidOutput with a short reason otherwise."""
     # Tolerate a Markdown fence around the JSON, nothing else.
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text)
     try:
-        return ReportOutput.model_validate(json.loads(text))
+        return model.model_validate(json.loads(text))
     except (ValueError, ValidationError) as e:
         raise InvalidOutput(_reason(e)) from None
+
+
+def parse_output(text: str) -> ReportOutput:
+    return parse_model(text, ReportOutput)
 
 
 def _reason(e: Exception) -> str:
@@ -176,11 +181,12 @@ def render_png(svg: str) -> bytes:
     return png
 
 
-def agent_instructions() -> str:
-    """Every Markdown file of app/codex_agent/, in name order."""
-    files = sorted(AGENT_DIR.glob("*.md"))
+def agent_instructions(directory: Path | None = None) -> str:
+    """Every Markdown file of an agent directory (app/codex_agent/ by default), in name order."""
+    directory = directory or AGENT_DIR
+    files = sorted(directory.glob("*.md"))
     if not files:
-        raise RuntimeError(f"no agent instructions in {AGENT_DIR}")
+        raise RuntimeError(f"no agent instructions in {directory}")
     return "\n\n".join(f.read_text(encoding="utf-8").strip() for f in files) + "\n"
 
 

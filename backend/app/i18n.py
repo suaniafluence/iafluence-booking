@@ -66,6 +66,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "discovery_event_description": "Appel découverte gratuit de {minutes} min, réservé sur le site IAfluence.",
         "discovery_event_message": "Sujet indiqué :\n{message}",
         "subject_nda": "Accord de confidentialité (NDA) — IAfluence",
+        "subject_reminder_session": "Où en êtes-vous ? Votre prochaine session de conseil IA",
+        "subject_reminder_rebook": "Des nouvelles de votre projet IA ?",
+        "subject_reminder_prospect": "Suite à notre appel découverte",
     },
     "en": {
         "subject_booking_link": "Book your first AI consulting session",
@@ -92,6 +95,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "discovery_event_description": "Free {minutes}-minute discovery call, booked on the IAfluence website.",
         "discovery_event_message": "Topic:\n{message}",
         "subject_nda": "Non-disclosure agreement (NDA) — IAfluence",
+        "subject_reminder_session": "How is it going? Your next AI consulting session",
+        "subject_reminder_rebook": "How is your AI project going?",
+        "subject_reminder_prospect": "Following up on our discovery call",
     },
     "es": {
         "subject_booking_link": "Reserve su primera sesión de asesoría en IA",
@@ -118,6 +124,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "discovery_event_description": "Llamada de descubrimiento gratuita de {minutes} min, reservada en el sitio web de IAfluence.",
         "discovery_event_message": "Tema indicado:\n{message}",
         "subject_nda": "Acuerdo de confidencialidad (NDA) — IAfluence",
+        "subject_reminder_session": "¿Cómo va todo? Su próxima sesión de asesoría en IA",
+        "subject_reminder_rebook": "¿Cómo va su proyecto de IA?",
+        "subject_reminder_prospect": "Tras nuestra llamada de descubrimiento",
     },
 }
 

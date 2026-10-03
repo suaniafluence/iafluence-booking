@@ -146,7 +146,7 @@ describe("SessionReports", () => {
     expect(toggle).toHaveTextContent("Masquer l’aperçu");
     expect(screen.getByRole("img", { name: "Infographie de la séance de Marie Martin" })).toHaveAttribute(
       "src",
-      "/api/admin/reports/7/image.png",
+      "/api/consultant/reports/7/image.png",
     );
     const list = screen.getByRole("list", { name: "Séances terminées" });
     const headings = within(list).getAllByRole("heading", { level: 3 }).map((h) => h.textContent);

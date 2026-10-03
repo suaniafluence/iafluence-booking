@@ -33,6 +33,14 @@ class Customer(Base):
     # customer in reply (the admin ticks it off).
     nda_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     nda_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # V3 cockpit. The consultant who follows this customer (one today: the platform is ready for several).
+    consultant_id: Mapped[int | None] = mapped_column(ForeignKey("staff_users.id", ondelete="SET NULL"), index=True)
+    company_name: Mapped[str | None] = mapped_column(String(255))
+    siren: Mapped[str | None] = mapped_column(String(9))
+    # Private notes of the consultant, never shown to the customer; given to the action plan agent.
+    notes: Mapped[str | None] = mapped_column(Text)
+    # Inactivity reminder (app.services.reminders): at most one per period of inactivity.
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     purchases: Mapped[list["Purchase"]] = relationship(back_populates="customer")
@@ -104,6 +112,8 @@ class Booking(Base):
     title: Mapped[str | None] = mapped_column(String(255))
     locale: Mapped[str | None] = mapped_column(String(5))
     customer_timezone: Mapped[str | None] = mapped_column(String(64))
+    # Discovery: what the prospect wants to talk about (typed on /decouverte), for the action plan.
+    message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     purchase: Mapped[Purchase | None] = relationship(back_populates="bookings")
@@ -261,6 +271,12 @@ class Settings(Base):
     # Free discovery call (/decouverte): same weekly hours, notice and buffers as the sessions.
     discovery_enabled: Mapped[bool] = mapped_column(Boolean, server_default="true", default=True)
     discovery_duration_min: Mapped[int] = mapped_column(Integer, server_default="30", default=30)
+    # Inactivity (app.services.reminders, app.services.learners): a reminder after `reminder_after_days` without a
+    # session (Gmail draft unless `reminder_auto_send`), hidden from the cockpit after `hide_after_days`.
+    reminder_enabled: Mapped[bool] = mapped_column(Boolean, server_default="true", default=True)
+    reminder_after_days: Mapped[int] = mapped_column(Integer, server_default="21", default=21)
+    reminder_auto_send: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
+    hide_after_days: Mapped[int] = mapped_column(Integer, server_default="60", default=60)
 
 
 class NdaDocument(Base):
@@ -299,3 +315,96 @@ class StripeEvent(Base):
     type: Mapped[str] = mapped_column(String(128))
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class StaffUser(Base):
+    """Someone who signs in with Google: admin (configuration) and/or consultant (cockpit).
+
+    The same email may hold both roles, but each role has its own session (app.auth). Only listed, active addresses
+    with a verified Google email get in; the Google account id (`sub`) is bound at the first sign-in."""
+
+    __tablename__ = "staff_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True)
+    name: Mapped[str] = mapped_column(String(255), server_default="", default="")
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
+    is_consultant: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
+    active: Mapped[bool] = mapped_column(Boolean, server_default="true", default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("is_admin OR is_consultant", name="staff_has_role"),
+        CheckConstraint("email = lower(email)", name="staff_email_lower"),
+    )
+
+    def has_role(self, role: str) -> bool:
+        return self.active and (self.is_admin if role == "admin" else self.is_consultant)
+
+
+class CustomerProfile(Base):
+    """What the consultant knows about the customer's company: the official register (app.services.company) and a
+    web research by Codex (app.services.research). Public information only."""
+
+    __tablename__ = "customer_profiles"
+
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), primary_key=True)
+    company: Mapped[dict | None] = mapped_column(JSONB)
+    company_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    research: Mapped[dict | None] = mapped_column(JSONB)
+    # running -> ready | failed
+    research_status: Mapped[str | None] = mapped_column(String(16))
+    research_error: Mapped[str | None] = mapped_column(Text)
+    research_claimed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    research_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("research_status IN ('running', 'ready', 'failed')", name="profile_research_status"),
+    )
+
+
+class ActionPlan(Base):
+    """The consultant's action plan for a customer: written by Codex once the customer buys hours after a discovery
+    call (or on demand), then refined by chat. One per customer, rewritten in place (`version`).
+
+    pending -> generating -> ready | failed; a chat message moves the plan back to pending."""
+
+    __tablename__ = "action_plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), unique=True)
+    consultant_id: Mapped[int | None] = mapped_column(ForeignKey("staff_users.id", ondelete="SET NULL"))
+    purchase_id: Mapped[int | None] = mapped_column(ForeignKey("purchases.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(16))
+    # Held by the process running the Codex turn (minutes: no row lock meanwhile).
+    claimed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    content: Mapped[dict | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    customer: Mapped[Customer] = relationship()
+    messages: Mapped[list["ActionPlanMessage"]] = relationship(
+        order_by="ActionPlanMessage.id", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'generating', 'ready', 'failed')", name="action_plan_status"),
+        Index("ix_action_plans_status", "status"),
+    )
+
+
+class ActionPlanMessage(Base):
+    __tablename__ = "action_plan_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("action_plans.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(16))  # consultant | assistant
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (CheckConstraint("role IN ('consultant', 'assistant')", name="plan_message_role"),)

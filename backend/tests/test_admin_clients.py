@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.models import BookingToken, Customer, Purchase
-from tests.conftest import ADMIN_PASSWORD, paris
+from tests.conftest import staff_login, ADMIN_PASSWORD, paris
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
@@ -13,17 +13,17 @@ NEW = {"name": " Claire Durand ", "email": "Claire@Example.com", "hours": 4, "am
 
 
 def login(client):
-    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
+    staff_login(client)
 
 
 def test_endpoints_require_the_admin_session(client):
-    assert client.post("/api/admin/clients", json=NEW).status_code == 401
-    assert client.patch("/api/admin/customers/1", json={"auto_send_next_link": True}).status_code == 401
+    assert client.post("/api/consultant/clients", json=NEW).status_code == 401
+    assert client.patch("/api/consultant/customers/1", json={"auto_send_next_link": True}).status_code == 401
 
 
 def test_add_client_by_hand_creates_a_bookable_purchase_and_emails_the_link(client, fakes):
     login(client)
-    r = client.post("/api/admin/clients", json=NEW)
+    r = client.post("/api/consultant/clients", json=NEW)
     assert r.status_code == 201, r.text
     out = r.json()
     token = out["booking_url"].rsplit("/", 1)[1]
@@ -47,7 +47,7 @@ def test_add_client_by_hand_creates_a_bookable_purchase_and_emails_the_link(clie
     booked = client.post("/api/bookings", json={"token": token, "start": paris(2026, 10, 8, 14).isoformat()})
     assert booked.status_code == 201
 
-    client_row = client.get("/api/admin/overview").json()["clients"][0]
+    client_row = client.get("/api/consultant/overview").json()["clients"][0]
     assert client_row["manual"] is True and client_row["booking_url"] == out["booking_url"]
     assert client_row["auto_send_next_link"] is False
 
@@ -56,7 +56,7 @@ def test_add_client_without_email_and_existing_customer_is_reused(client, fakes,
     token_for(email="claire@example.com", name="Ancien Nom")
     fakes["mailer"].sent.clear()
     login(client)
-    r = client.post("/api/admin/clients", json={**NEW, "product_name": "Atelier IA", "send_link": False})
+    r = client.post("/api/consultant/clients", json={**NEW, "product_name": "Atelier IA", "send_link": False})
     assert r.status_code == 201
     assert fakes["mailer"].sent == []
     with SessionLocal() as db:
@@ -71,27 +71,27 @@ def test_add_client_without_email_and_existing_customer_is_reused(client, fakes,
 )
 def test_add_client_validates_input(client, bad):
     login(client)
-    assert client.post("/api/admin/clients", json={**NEW, **bad}).status_code == 422
+    assert client.post("/api/consultant/clients", json={**NEW, **bad}).status_code == 422
 
 
 def test_toggle_auto_send_per_client(client, token_for):
     token_for()
     login(client)
-    [row] = client.get("/api/admin/overview").json()["clients"]
+    [row] = client.get("/api/consultant/overview").json()["clients"]
     assert row["auto_send_next_link"] is False and row["manual"] is False
     assert row["booking_url"].startswith("https://booking.iafluence.test/fr/reservation/")
 
-    r = client.patch(f"/api/admin/customers/{row['customer_id']}", json={"auto_send_next_link": True})
+    r = client.patch(f"/api/consultant/customers/{row['customer_id']}", json={"auto_send_next_link": True})
     assert r.json() == {"customer_id": row["customer_id"], "auto_send_next_link": True}
-    assert client.get("/api/admin/overview").json()["clients"][0]["auto_send_next_link"] is True
+    assert client.get("/api/consultant/overview").json()["clients"][0]["auto_send_next_link"] is True
 
-    client.patch(f"/api/admin/customers/{row['customer_id']}", json={"auto_send_next_link": False})
-    assert client.get("/api/admin/overview").json()["clients"][0]["auto_send_next_link"] is False
+    client.patch(f"/api/consultant/customers/{row['customer_id']}", json={"auto_send_next_link": False})
+    assert client.get("/api/consultant/overview").json()["clients"][0]["auto_send_next_link"] is False
 
 
 def test_toggle_unknown_customer(client):
     login(client)
-    r = client.patch("/api/admin/customers/999", json={"auto_send_next_link": True})
+    r = client.patch("/api/consultant/customers/999", json={"auto_send_next_link": True})
     assert r.status_code == 404 and r.json()["detail"] == "Client introuvable."
 
 
@@ -102,4 +102,4 @@ def test_revoked_link_is_not_offered_to_the_admin(client, token_for):
             tok.revoked_at = paris(2026, 10, 1, 9)
         db.commit()
     login(client)
-    assert client.get("/api/admin/overview").json()["clients"][0]["booking_url"] is None
+    assert client.get("/api/consultant/overview").json()["clients"][0]["booking_url"] is None

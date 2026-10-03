@@ -1,0 +1,14 @@
+Hola, {{ name }}:
+
+Su acompañamiento en asesoría en IA terminó hace unas semanas: ¿cómo funciona todo lo que pusimos en marcha?
+
+Si desea ir más allá (un nuevo caso de uso, extenderlo a su equipo, actualizar las herramientas), puede contratar nuevas horas de asesoría aquí:
+
+{{ shop_url }}
+
+Y si simplemente tiene una pregunta, responda a este correo.
+
+Hasta pronto,
+
+{{ consultant_name }}
+IAfluence

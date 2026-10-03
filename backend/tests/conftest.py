@@ -26,6 +26,8 @@ os.environ["SESSION_SECRET"] = "test-secret"
 os.environ["COOKIE_SECURE"] = "false"
 os.environ["STRIPE_ALLOWED_PRODUCT_IDS"] = ""
 os.environ["FOLLOW_UP_POLL_SECONDS"] = "0"  # tests drive the job explicitly
+os.environ["GOOGLE_SSO_CLIENT_ID"] = "sso-client.apps.googleusercontent.com"
+os.environ["GOOGLE_SSO_CLIENT_SECRET"] = "sso-secret"
 
 PARIS = ZoneInfo("Europe/Paris")
 # Monday 5 October 2026, 08:00 Paris.
@@ -211,11 +213,13 @@ class FakeCodex:
         self.logged_out += 1
         self.connected = None
 
-    def run_turn(self, *, instructions, prompt, output_schema):
+    def run_turn(self, *, instructions, prompt, output_schema, web_search=False):
         from app.services.codex import CodexNotConnected
 
         self._check()
-        self.turns.append({"instructions": instructions, "prompt": prompt, "output_schema": output_schema})
+        self.turns.append(
+            {"instructions": instructions, "prompt": prompt, "output_schema": output_schema, "web_search": web_search}
+        )
         if self.connected is None:
             raise CodexNotConnected("Codex n'est pas connecté")
         answer = self.answers.pop(0) if self.answers else self.answer()
@@ -266,7 +270,63 @@ class FakeStripe:
         return self.sessions[session_id]
 
 
-# --- fixtures --------------------------------------------------------------------
+class FakeSso:
+    """Google: each authorization URL records its nonce; the test then calls the callback with `code`."""
+
+    def __init__(self):
+        self.flows: dict[str, dict] = {}
+        self.identity: dict = {}
+        self.fail = False
+
+    def authorization_url(self, *, redirect_uri, state, nonce, code_challenge, login_hint=None):
+        self.flows[state] = {"nonce": nonce, "challenge": code_challenge, "redirect_uri": redirect_uri, "hint": login_hint}
+        return f"https://accounts.google.test/auth?state={state}"
+
+    def exchange(self, *, code, redirect_uri, code_verifier):
+        from app.services.google_sso import GoogleIdentity, SsoError
+
+        if self.fail:
+            raise SsoError("code refusé par Google (400)")
+        email, _, state = code.partition("|")
+        flow = self.flows[state]
+        claims = {"sub": f"sub-{email}", "email": email, "email_verified": True, "name": "", "nonce": flow["nonce"]}
+        claims |= self.identity
+        return GoogleIdentity(**claims)
+
+
+class FakeCompanyRegister:
+    def __init__(self):
+        self.companies: list[dict] = []
+        self.queries: list[str] = []
+        self.fail = None
+
+    def search(self, query):
+        self.queries.append(query)
+        if self.fail:
+            raise self.fail
+        q = query.lower()
+        return [c for c in self.companies if q in c["siren"] or q in c["nom_complet"].lower()]
+
+
+def google_sign_in(client, role="consultant", email="admin@iafluence.test"):
+    """The whole Google flow through the API, with FakeSso standing in for Google."""
+    from urllib.parse import parse_qs, urlparse
+
+    start = client.get(f"/api/auth/google/start?role={role}", follow_redirects=False)
+    assert start.status_code == 302, start.text
+    state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
+    return client.get(f"/api/auth/google/callback?code={email}|{state}&state={state}", follow_redirects=False)
+
+
+def staff_login(client, email="admin@iafluence.test"):
+    """Signed in to both areas: the admin with the password, the cockpit with Google."""
+    assert client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).status_code == 200
+    r = google_sign_in(client, "consultant", email)
+    assert r.headers["location"] == "/consultant", r.headers["location"]
+    return r
+
+
+# --- fixtures --------------------------------------------------------------------------------------------------
 
 requires_db = pytest.mark.skipif(not TEST_DB, reason="TEST_DATABASE_URL not set")
 
@@ -299,7 +359,8 @@ def db_clean(migrated_db):
         db.execute(
             text(
                 "TRUNCATE customers, purchases, booking_tokens, bookings, calendar_sources, "
-                "settings, availability_rules, stripe_events, session_reports, codex_logins, nda_documents RESTART IDENTITY CASCADE"
+                "settings, availability_rules, stripe_events, session_reports, codex_logins, nda_documents, staff_users, "
+                "customer_profiles, action_plans, action_plan_messages RESTART IDENTITY CASCADE"
             )
         )
         db.commit()
@@ -325,6 +386,8 @@ def fakes():
         "stripe": FakeStripe(),
         "fireflies": FakeFireflies(),
         "codex": FakeCodex(),
+        "sso": FakeSso(),
+        "company": FakeCompanyRegister(),
     }
 
 
@@ -340,6 +403,8 @@ def client(db_clean, fakes):
     app.dependency_overrides[deps.get_stripe] = lambda: fakes["stripe"]
     app.dependency_overrides[deps.get_fireflies] = lambda: fakes["fireflies"]
     app.dependency_overrides[deps.get_codex] = lambda: fakes["codex"]
+    app.dependency_overrides[deps.get_sso] = lambda: fakes["sso"]
+    app.dependency_overrides[deps.get_company_register] = lambda: fakes["company"]
     app.dependency_overrides[deps.get_now] = lambda: NOW
     with TestClient(app) as c:
         yield c

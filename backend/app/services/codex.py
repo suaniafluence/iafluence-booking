@@ -69,8 +69,11 @@ class CodexGateway(Protocol):
 
     def logout(self) -> None: ...
 
-    def run_turn(self, *, instructions: str, prompt: str, output_schema: dict) -> str:
-        """Final agent message of one turn, constrained by `output_schema`."""
+    def run_turn(self, *, instructions: str, prompt: str, output_schema: dict, web_search: bool = False) -> str:
+        """Final agent message of one turn, constrained by `output_schema`.
+
+        `web_search` turns Codex's web search on for this thread only (the app-server keeps it off): for public
+        research about a company, never for a turn that carries a transcript."""
 
 
 def short(message: Any) -> str:
@@ -241,7 +244,7 @@ class LiveCodex:
         with self._open() as rpc:
             rpc.request("account/logout", None)
 
-    def run_turn(self, *, instructions: str, prompt: str, output_schema: dict) -> str:
+    def run_turn(self, *, instructions: str, prompt: str, output_schema: dict, web_search: bool = False) -> str:
         cfg = get_config()
         with self._open() as rpc:
             if account_from(rpc.request("account/read", {"refreshToken": True})) is None:
@@ -255,6 +258,8 @@ class LiveCodex:
                     "ephemeral": True,
                     "developerInstructions": instructions,
                     "serviceName": "iafluence_booking",
+                    # Applied after the app-server's own -c flags: this thread's setting wins.
+                    "config": {"web_search": "live" if web_search else "disabled"},
                 },
             )["thread"]
             turn = rpc.request(

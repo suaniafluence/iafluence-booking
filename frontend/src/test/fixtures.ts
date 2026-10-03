@@ -1,5 +1,11 @@
 import type {
+  ActionPlan,
   AdminOverview,
+  CompanyProfile,
+  LearnerDetail,
+  LearnerList,
+  LearnerRow,
+  PlanContent,
   BookingConfirmed,
   BookingContext,
   CodexLogin,
@@ -190,3 +196,162 @@ export function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+
+// --- V3 cockpit ---------------------------------------------------------------------------------------------------
+
+export const learnerRow = (over: Partial<LearnerRow> = {}): LearnerRow => ({
+  customer_id: 7,
+  name: "Jean Dupont",
+  email: "jean@dupont-conseil.fr",
+  company: "Dupont Conseil",
+  status: "en_cours",
+  hours_purchased: 5,
+  sessions_done: 2,
+  sessions_to_deliver: 3,
+  hours_to_schedule: 2,
+  next_session: { id: 3, kind: "session", start: "2026-10-08T14:00:00+02:00", end: "2026-10-08T15:00:00+02:00", meet_url: null },
+  last_session: null,
+  idle_days: null,
+  hidden: false,
+  pace_days: 14,
+  projected_end: "2026-11-16T08:00:00+01:00",
+  plan_status: null,
+  reminder_sent_at: null,
+  alerts: [{ niveau: "info", texte: "Pas encore de plan d'action" }],
+  ...over,
+});
+
+export const learnerList = (over: Partial<LearnerList> = {}): LearnerList => ({
+  learners: [learnerRow()],
+  hidden_count: 0,
+  settings: { reminder_after_days: 21, hide_after_days: 60, session_duration_min: 60 },
+  ...over,
+});
+
+export const company = (over: Partial<CompanyProfile> = {}): CompanyProfile => ({
+  siren: "812345678",
+  nom: "DUPONT CONSEIL",
+  sigle: null,
+  etat: "active",
+  date_creation: "2015-06-01",
+  date_fermeture: null,
+  categorie: "PME",
+  activite_code: "70.22Z",
+  effectif: "3 à 5 salariés",
+  effectif_annee: "2023",
+  adresse: "1 rue X 69001 LYON",
+  etablissements: 1,
+  dirigeants: [{ nom: "Jean DUPONT", qualite: "Gérant" }],
+  finances: [{ annee: 2024, ca: 300000, resultat_net: -5000 }],
+  labels: ["Certifié Qualiopi"],
+  signaux: [{ niveau: "attention", texte: "Résultat net négatif en 2024" }],
+  ...over,
+});
+
+export const planContent = (over: Partial<PlanContent> = {}): PlanContent => ({
+  resume: "Premier cas d'usage : les devis.",
+  objectif: "Diviser par trois le temps des devis",
+  diagnostic: ["Devis à la main (appel)"],
+  priorites: [{ titre: "Devis", pourquoi: "Cité en premier", gain_attendu: "4 h/semaine", effort: "faible" }],
+  seances: [
+    {
+      numero: 1,
+      titre: "Cadrage",
+      objectif: "Un livrable",
+      duree_min: 60,
+      deroule: [
+        { minutes: 10, activite: "Point" },
+        { minutes: 50, activite: "Atelier" },
+      ],
+      livrable: "Prototype",
+      preparation_client: ["Dix devis"],
+    },
+  ],
+  entre_les_seances: ["Tester sur trois devis"],
+  indicateurs: ["Temps par devis"],
+  risques: [{ risque: "RGPD", parade: "Compte pro" }],
+  outils: [{ nom: "ChatGPT Team", usage: "Rédaction", cout: "30 €/mois" }],
+  hypotheses_a_verifier: [],
+  questions_ouvertes: ["Qui valide ?"],
+  ...over,
+});
+
+export const plan = (over: Partial<ActionPlan> = {}): ActionPlan => ({
+  id: 1,
+  status: "ready",
+  busy: false,
+  content: planContent(),
+  error: null,
+  version: 1,
+  validated_at: null,
+  updated_at: "2026-10-05T08:00:00+02:00",
+  messages: [{ role: "assistant", content: "Choix : les devis d'abord.", created_at: "2026-10-05T08:00:00+02:00" }],
+  ...over,
+});
+
+export const learnerDetail = (over: Partial<LearnerDetail> = {}): LearnerDetail => ({
+  customer: {
+    id: 7,
+    name: "Jean Dupont",
+    email: "jean@dupont-conseil.fr",
+    company_name: "Dupont Conseil",
+    siren: null,
+    notes: "Très pressé",
+    auto_send_next_link: false,
+    nda_sent_at: null,
+    nda_signed_at: null,
+    reminder_sent_at: null,
+    created_at: "2026-09-01T10:00:00+02:00",
+  },
+  time: {
+    status: "en_cours",
+    hours_purchased: 5,
+    hours_booked: 3,
+    hours_to_schedule: 2,
+    sessions_done: 2,
+    sessions_to_deliver: 3,
+    session_duration_min: 60,
+    next_session: { id: 3, kind: "session", start: "2026-10-08T14:00:00+02:00", end: "2026-10-08T15:00:00+02:00", meet_url: null },
+    idle_days: null,
+    pace_days: 14,
+    projected_end: "2026-11-16T08:00:00+01:00",
+    hidden: false,
+    alerts: [],
+  },
+  purchases: [
+    {
+      id: 1,
+      product: "Conseil IA - 5h",
+      hours_purchased: 5,
+      hours_booked: 3,
+      hours_remaining: 2,
+      payment_status: "paid",
+      amount_cents: 50000,
+      created_at: "2026-09-01T10:00:00+02:00",
+      booking_url: "https://booking.iafluence.fr/fr/reservation/tok",
+    },
+  ],
+  timeline: [
+    {
+      booking_id: 9,
+      kind: "discovery",
+      status: "completed",
+      label: "Appel découverte",
+      start: "2026-08-25T10:00:00+02:00",
+      end: "2026-08-25T10:30:00+02:00",
+      meet_url: null,
+      message: "Automatiser les devis",
+      report: {
+        id: 2,
+        status: "drafted",
+        erased: false,
+        synthese: { objectifs: [], points_abordes: ["Devis"], decisions: ["Commencer par les devis"], actions_client: [], prochaines_etapes: [] },
+      },
+    },
+  ],
+  company: null,
+  company_fetched_at: null,
+  research: { status: null, content: null, error: null, updated_at: null },
+  plan: null,
+  ...over,
+});

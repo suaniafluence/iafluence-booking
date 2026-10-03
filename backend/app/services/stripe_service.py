@@ -132,10 +132,12 @@ class FulfillResult:
 
 def upsert_customer(db: Session, name: str, email: str) -> Customer:
     """Email is the identity; the latest name wins."""
+    from app.auth import default_consultant_id
+
     db.execute(
-        pg_insert(Customer).values(name=name, email=email).on_conflict_do_update(
-            index_elements=[Customer.email], set_={"name": name}
-        )
+        pg_insert(Customer)
+        .values(name=name, email=email, consultant_id=default_consultant_id(db))
+        .on_conflict_do_update(index_elements=[Customer.email], set_={"name": name})
     )
     return db.scalar(select(Customer).where(Customer.email == email).execution_options(populate_existing=True))
 
@@ -177,7 +179,20 @@ def fulfill_checkout(db: Session, stripe_gw: StripeGateway, session_id: str) -> 
     db.commit()
     purchase = db.get(Purchase, inserted_id)
     log.info("purchase %s created for checkout session", purchase.id)
+    plan_after_purchase(db, purchase)
     return FulfillResult(purchase, token, created=True)
+
+
+def plan_after_purchase(db: Session, purchase: Purchase) -> None:
+    """Hours bought after a discovery call: Codex drafts the consultant's action plan (app.services.action_plans)."""
+    from app.services import action_plans
+
+    try:
+        action_plans.on_purchase(db, purchase, datetime.now(UTC))
+    except Exception:
+        # Never in the way of a payment.
+        db.rollback()
+        log.exception("could not queue the action plan of purchase %s", purchase.id)
 
 
 def _active_token(db: Session, purchase: Purchase) -> str:

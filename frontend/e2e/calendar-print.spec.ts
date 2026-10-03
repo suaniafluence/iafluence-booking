@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { adminLogin } from "./helpers";
+import { consultantLogin } from "./helpers";
 
-test("l'administrateur télécharge son calendrier en PDF sur une période", async ({ page }) => {
-  await adminLogin(page);
+test("le consultant télécharge son calendrier en PDF sur une période", async ({ page }) => {
+  await consultantLogin(page);
   const section = page.locator("section").filter({ has: page.getByRole("heading", { name: "Imprimer mon calendrier" }) });
   await expect(section.getByLabel("Du")).toHaveValue(/^\d{4}-\d\d-\d\d$/);
 

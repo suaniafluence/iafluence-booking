@@ -1,20 +1,15 @@
 import { expect, test } from "@playwright/test";
-import { adminLogin, bookedCustomer, customerEmail, customerName, endSessionsOf, outbox } from "./helpers";
+import { bookedCustomer, connectCodex, consultantLogin, customerEmail, customerName, endSessionsOf, outbox } from "./helpers";
 
 // Demo mode: Fireflies has a recording of every session, the demo agent writes the summary and the infographic,
 // Gmail drafts are saved as .eml files. The end-of-session and report jobs run every second.
 test("séance terminée → brouillon Gmail avec la synthèse et l'infographie", async ({ page, request }) => {
   const who = await bookedCustomer(request, 2);
-  await adminLogin(page);
-
   // Codex must be connected before the session ends (otherwise the report fails and the admin is alerted).
-  const codex = page.locator("section").filter({ has: page.getByRole("heading", { name: "Connexion Codex" }) });
-  if (await codex.getByRole("button", { name: /Connecter Codex/ }).isVisible()) {
-    await codex.getByRole("button", { name: /Connecter Codex/ }).click();
-    await expect(codex.getByText("Connecté", { exact: true })).toBeVisible({ timeout: 15_000 });
-  }
+  const codex = await connectCodex(page);
 
   endSessionsOf(customerEmail(who));
+  await consultantLogin(page);
 
   const reports = page.locator("section").filter({ has: page.getByRole("heading", { name: "Comptes rendus de séance" }) });
   const item = reports.getByRole("listitem").filter({ hasText: customerName(who) }).first();
