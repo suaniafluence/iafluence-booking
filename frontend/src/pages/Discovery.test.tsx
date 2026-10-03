@@ -12,7 +12,7 @@ const calls = [
   { start: "2026-10-08T14:00:00+02:00", end: "2026-10-08T14:30:00+02:00" },
   { start: "2026-10-08T14:30:00+02:00", end: "2026-10-08T15:00:00+02:00" },
 ];
-const info = { consultant_name: "Suan Tay", timezone: "Europe/Paris", duration_min: 30 };
+const info = { consultant_name: "Suan Tay", timezone: "Europe/Paris", duration_min: 30, nda_available: false };
 const booked = { start: calls[1].start, end: calls[1].end, meet_url: "https://meet.google.com/xyz" };
 
 function renderAt(lang: Lang = "fr") {
@@ -82,12 +82,33 @@ describe("Discovery", () => {
       message: "Automatiser mes devis",
       locale: "fr",
       timezone: "Europe/Paris",
+      nda: false,
       website: "",
     });
     expect(await screen.findByRole("heading", { name: "Appel découverte réservé" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "https://meet.google.com/xyz" })).toBeInTheDocument();
     expect(screen.getByText("paul@example.com")).toBeInTheDocument();
     expect(screen.getByText(/Répondez simplement à l’email de confirmation/)).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByText(/accord de confidentialité vous est envoyé/)).not.toBeInTheDocument();
+  });
+
+  it("offers the NDA once its PDF is uploaded, and says it is on its way", async () => {
+    vi.mocked(api.discoveryInfo).mockResolvedValue({ ...info, nda_available: true });
+    const user = await pick();
+    await fill(user);
+    const box = screen.getByRole("checkbox", {
+      name: /Je souhaite recevoir par email un accord de confidentialité \(NDA\), déjà signé par Suan Tay/,
+    });
+    expect(box).not.toBeChecked();
+    await user.click(box);
+    await user.click(screen.getByRole("button", { name: "Réserver l’appel" }));
+    expect(api.bookDiscovery).toHaveBeenCalledWith(expect.objectContaining({ nda: true }));
+    expect(
+      await screen.findByText(
+        "L’accord de confidentialité vous est envoyé par email : signez-le et renvoyez-le simplement en réponse.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows the button as busy while booking", async () => {

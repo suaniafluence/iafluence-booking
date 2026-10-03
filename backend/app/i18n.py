@@ -65,6 +65,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "discovery_event_summary": "Appel découverte - {name}",
         "discovery_event_description": "Appel découverte gratuit de {minutes} min, réservé sur le site IAfluence.",
         "discovery_event_message": "Sujet indiqué :\n{message}",
+        "subject_nda": "Accord de confidentialité (NDA) — IAfluence",
     },
     "en": {
         "subject_booking_link": "Book your first AI consulting session",
@@ -90,6 +91,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "discovery_event_summary": "Discovery call - {name}",
         "discovery_event_description": "Free {minutes}-minute discovery call, booked on the IAfluence website.",
         "discovery_event_message": "Topic:\n{message}",
+        "subject_nda": "Non-disclosure agreement (NDA) — IAfluence",
     },
     "es": {
         "subject_booking_link": "Reserve su primera sesión de asesoría en IA",
@@ -115,6 +117,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "discovery_event_summary": "Llamada de descubrimiento - {name}",
         "discovery_event_description": "Llamada de descubrimiento gratuita de {minutes} min, reservada en el sitio web de IAfluence.",
         "discovery_event_message": "Tema indicado:\n{message}",
+        "subject_nda": "Acuerdo de confidencialidad (NDA) — IAfluence",
     },
 }
 

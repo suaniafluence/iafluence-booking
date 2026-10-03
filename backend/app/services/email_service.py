@@ -5,7 +5,7 @@ Recipients can use any provider (Gmail, Outlook, Proton, professional…) — R0
 
 import base64
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from email.message import EmailMessage
 from email.utils import formataddr
 from pathlib import Path
@@ -31,23 +31,49 @@ def render(template: str, **ctx) -> str:
     return _env.get_template(template).render(**ctx)
 
 
+# (filename, PDF bytes)
+Attachment = tuple[str, bytes]
+
+
 class Mailer(Protocol):
-    """`html` adds an HTML alternative to the text body; `images` are PNGs it shows with <img src="cid:KEY">."""
+    """`html` adds an HTML alternative to the text body; `images` are PNGs it shows with <img src="cid:KEY">;
+    `attachments` are PDF files."""
 
     def send(
-        self, to: str, subject: str, body: str, *, html: str | None = None, images: Mapping[str, bytes] | None = None
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        *,
+        html: str | None = None,
+        images: Mapping[str, bytes] | None = None,
+        attachments: Sequence[Attachment] | None = None,
     ) -> None: ...
 
     def draft(
-        self, to: str, subject: str, body: str, *, html: str | None = None, images: Mapping[str, bytes] | None = None
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        *,
+        html: str | None = None,
+        images: Mapping[str, bytes] | None = None,
+        attachments: Sequence[Attachment] | None = None,
     ) -> None:
         """Leave the email in the Gmail drafts of the sender, to be completed and sent by hand."""
 
 
 def build_message(
-    to: str, subject: str, body: str, *, html: str | None = None, images: Mapping[str, bytes] | None = None
+    to: str,
+    subject: str,
+    body: str,
+    *,
+    html: str | None = None,
+    images: Mapping[str, bytes] | None = None,
+    attachments: Sequence[Attachment] | None = None,
 ) -> EmailMessage:
-    """Plain text, or multipart/alternative (text + multipart/related HTML with its inline PNGs)."""
+    """Plain text, or multipart/alternative (text + multipart/related HTML with its inline PNGs), then the
+    attached PDFs (multipart/mixed)."""
     cfg = get_config()
     msg = EmailMessage()
     msg["From"] = formataddr((cfg.mail_from_name, cfg.mail_from))
@@ -59,6 +85,8 @@ def build_message(
         html_part = msg.get_payload()[1]
         for cid, png in (images or {}).items():
             html_part.add_related(png, "image", "png", cid=f"<{cid}>", filename=f"{cid}.png", disposition="inline")
+    for filename, data in attachments or ():
+        msg.add_attachment(data, "application", "pdf", filename=filename)
     return msg
 
 
@@ -93,12 +121,15 @@ def send_safely(
     as_draft: bool = False,
     html: str | None = None,
     images: Mapping[str, bytes] | None = None,
+    attachments: Sequence[Attachment] | None = None,
 ) -> bool:
     """Emails never break the business flow: failures are logged for manual follow-up."""
     if not to:
         log.warning("email '%s' skipped: no recipient", subject)
         return False
     parts = {"html": html, "images": images} if html is not None else {}
+    if attachments:
+        parts["attachments"] = attachments
     try:
         (mailer.draft if as_draft else mailer.send)(to, subject, body, **parts)
         return True

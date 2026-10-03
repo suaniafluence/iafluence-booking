@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, reportImageUrl } from "./api";
+import { api, ApiError, ndaPdfUrl, reportImageUrl } from "./api";
 
 function mockFetch(status: number, body: unknown, json = true) {
   const fn = vi.fn().mockResolvedValue({
@@ -42,6 +42,7 @@ describe("api", () => {
         start: "2026-10-08T14:00:00+02:00",
         locale: "en",
         timezone: "Australia/Sydney",
+        nda: false,
       }),
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
@@ -69,6 +70,27 @@ describe("api", () => {
       "/api/admin/purchases/3",
       expect.objectContaining({ method: "PATCH", body: '{"hours_purchased":2}' }),
     );
+    await api.adminNda();
+    expect(fetch).toHaveBeenLastCalledWith("/api/admin/nda", expect.anything());
+    const pdf = new File(["%PDF-1.7"], "NDA signé.pdf", { type: "application/pdf" });
+    await api.adminNdaUpload("en", pdf);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/nda/documents/en?filename=NDA%20sign%C3%A9.pdf",
+      expect.objectContaining({ method: "PUT", body: pdf, headers: { "Content-Type": "application/pdf" } }),
+    );
+    await api.adminNdaDelete("es");
+    expect(fetch).toHaveBeenLastCalledWith("/api/admin/nda/documents/es", expect.objectContaining({ method: "DELETE" }));
+    await api.adminNdaSend({ name: "Claire", email: "claire@example.com", locale: "fr" });
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/nda/send",
+      expect.objectContaining({ method: "POST", body: '{"name":"Claire","email":"claire@example.com","locale":"fr"}' }),
+    );
+    await api.adminNdaSigned(4, true);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/customers/4/nda",
+      expect.objectContaining({ method: "PATCH", body: '{"signed":true}' }),
+    );
+    expect(ndaPdfUrl("fr")).toBe("/api/admin/nda/documents/fr.pdf");
     await api.adminSetAutoSend(7, true);
     expect(fetch).toHaveBeenLastCalledWith(
       "/api/admin/customers/7",
@@ -125,6 +147,7 @@ describe("api", () => {
       message: "",
       locale: "fr",
       timezone: "Europe/Paris",
+      nda: true,
       website: "",
     };
     await api.bookDiscovery(call);

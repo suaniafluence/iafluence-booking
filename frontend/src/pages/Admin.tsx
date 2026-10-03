@@ -7,6 +7,7 @@ import { euros, hm, hours, longDate } from "../format";
 import { CalendarPrint } from "./admin/CalendarPrint";
 import { CodexConnection } from "./admin/CodexConnection";
 import { FirefliesConnection } from "./admin/FirefliesConnection";
+import { NdaAgreement } from "./admin/NdaAgreement";
 import { SessionReports } from "./admin/SessionReports";
 
 export default function Admin() {
@@ -135,6 +136,8 @@ function Dashboard({ data, onChange }: { data: AdminOverview; onChange: () => vo
       <CalendarPrint />
 
       <Clients clients={data.clients} onChange={onChange} />
+
+      <NdaAgreement />
 
       <SessionReports reports={data.reports} onChange={onChange} />
 

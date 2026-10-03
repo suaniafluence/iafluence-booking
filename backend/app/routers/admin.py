@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
-from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Request, Response
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import get_config
 from app.db import get_db
 from app.deps import get_calendar, get_codex, get_fireflies, get_mailer, get_now
-from app.models import Booking, BookingToken, CodexLogin, Customer, Purchase, SessionReport
+from app.models import Booking, BookingToken, CodexLogin, Customer, NdaDocument, Purchase, SessionReport
 from app.schemas import (
     CancelBookingIn,
     FirefliesConnectIn,
@@ -21,6 +21,8 @@ from app.schemas import (
     ManualClientIn,
     MeetingReportIn,
     ManualClientOut,
+    NdaSendIn,
+    NdaSignedIn,
     PurchaseHoursIn,
     ReportSettingsIn,
 )
@@ -31,6 +33,7 @@ from app.services import (
     fireflies_account,
     manual_purchase,
     meetings,
+    nda,
     notifications,
     session_reports,
 )
@@ -456,3 +459,67 @@ def fireflies_connect(
 @router.delete("/fireflies", dependencies=[Depends(require_admin)])
 def fireflies_disconnect(db: Session = Depends(get_db)):
     return fireflies_account.disconnect(db)
+
+
+# --- confidentiality agreement (NDA) ---------------------------------------------------------------------------
+
+
+def _nda_action(action):
+    try:
+        return action()
+    except nda.NdaError as e:
+        raise HTTPException(e.status_code, e.message)
+
+
+@router.get("/nda", dependencies=[Depends(require_admin)])
+def nda_overview(db: Session = Depends(get_db)):
+    """The uploaded PDFs, and every person the agreement was sent to (returned signed or not)."""
+    return nda.overview(db, ZoneInfo(get_settings(db).timezone))
+
+
+@router.put("/nda/documents/{locale}", dependencies=[Depends(require_admin)])
+async def nda_upload(
+    locale: str,
+    request: Request,
+    filename: str | None = None,
+    db: Session = Depends(get_db),
+    now: datetime = Depends(get_now),
+):
+    """The PDF already signed by the consultant, sent as the raw request body (application/pdf)."""
+    pdf = await request.body()
+    doc = _nda_action(lambda: nda.upload(db, locale, filename, pdf, now))
+    return {"locale": doc.locale, "filename": doc.filename, "size": len(doc.pdf)}
+
+
+@router.get("/nda/documents/{locale}.pdf", dependencies=[Depends(require_admin)])
+def nda_download(locale: str, db: Session = Depends(get_db)):
+    doc = db.get(NdaDocument, locale)
+    if doc is None:
+        raise HTTPException(404, "Aucun PDF pour cette langue.")
+    return Response(
+        doc.pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{doc.filename}"', "Cache-Control": "private, no-store"},
+    )
+
+
+@router.delete("/nda/documents/{locale}", dependencies=[Depends(require_admin)])
+def nda_delete(locale: str, db: Session = Depends(get_db)):
+    _nda_action(lambda: nda.remove(db, locale))
+    return {"status": "deleted"}
+
+
+@router.post("/nda/send", dependencies=[Depends(require_admin)])
+def nda_send(body: NdaSendIn, db: Session = Depends(get_db), mailer=Depends(get_mailer), now: datetime = Depends(get_now)):
+    """« Envoyer le NDA » (or send it again) to a client or a contact met elsewhere."""
+    customer = _nda_action(
+        lambda: nda.send_now(db, mailer, name=body.name, email=str(body.email).lower(), locale=body.locale, now=now)
+    )
+    return {"customer_id": customer.id, "sent_at": customer.nda_sent_at.isoformat()}
+
+
+@router.patch("/customers/{customer_id}/nda", dependencies=[Depends(require_admin)])
+def nda_signed(customer_id: int, body: NdaSignedIn, db: Session = Depends(get_db), now: datetime = Depends(get_now)):
+    """« Signé reçu » : the customer returned the agreement signed (by replying to its email)."""
+    customer = _nda_action(lambda: nda.set_signed(db, customer_id, body.signed, now))
+    return {"customer_id": customer.id, "signed_at": customer.nda_signed_at.isoformat() if customer.nda_signed_at else None}

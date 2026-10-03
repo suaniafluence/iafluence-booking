@@ -39,6 +39,9 @@ class BookingContextOut(BaseModel):
     timezone: str
     booking_duration_min: int
     locale: str
+    # Confidentiality agreement: offered when its PDF is uploaded and this customer has not received it yet.
+    nda_available: bool
+    nda_sent: bool
 
 
 class CheckoutOut(BaseModel):
@@ -52,6 +55,8 @@ class BookingIn(BaseModel):
     # Language of the page and IANA time zone of the browser; unknown values are ignored.
     locale: str | None = Field(None, max_length=16)
     timezone: str | None = Field(None, max_length=64)
+    # Box ticked: email the confidentiality agreement (app.services.nda).
+    nda: bool = False
 
 
 class BookingConfirmedOut(BaseModel):
@@ -110,6 +115,7 @@ class DiscoveryInfoOut(BaseModel):
     consultant_name: str
     timezone: str
     duration_min: int
+    nda_available: bool
 
 
 class DiscoveryIn(BaseModel):
@@ -120,6 +126,7 @@ class DiscoveryIn(BaseModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] = ""
     locale: str | None = Field(None, max_length=16)
     timezone: str | None = Field(None, max_length=64)
+    nda: bool = False
     # Honeypot: hidden from people, filled in by bots.
     website: str = Field("", max_length=255)
 
@@ -138,3 +145,13 @@ class MeetingReportIn(BaseModel):
     name: Label
     email: EmailStr
     locale: Literal["fr", "en", "es"] = "fr"
+
+
+class NdaSendIn(BaseModel):
+    name: Label
+    email: EmailStr
+    locale: Literal["fr", "en", "es"] = "fr"
+
+
+class NdaSignedIn(BaseModel):
+    signed: bool

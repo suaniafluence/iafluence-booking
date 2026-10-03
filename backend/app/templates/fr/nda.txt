@@ -1,0 +1,15 @@
+Bonjour {{ name }},
+
+Comme convenu, vous trouverez en pièce jointe notre accord de confidentialité (NDA), déjà signé de mon côté.
+
+Pour le compléter :
+1. indiquez vos nom, société et date aux emplacements prévus ;
+2. signez-le (une signature électronique ou un scan suffit) ;
+3. renvoyez-le en réponse à cet email.
+
+Tout ce que vous partagerez pendant nos échanges reste strictement confidentiel.
+
+Bien cordialement,
+
+{{ consultant_name }}
+IAfluence

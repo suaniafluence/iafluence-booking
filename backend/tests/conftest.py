@@ -299,7 +299,7 @@ def db_clean(migrated_db):
         db.execute(
             text(
                 "TRUNCATE customers, purchases, booking_tokens, bookings, calendar_sources, "
-                "settings, availability_rules, stripe_events, session_reports, codex_logins RESTART IDENTITY CASCADE"
+                "settings, availability_rules, stripe_events, session_reports, codex_logins, nda_documents RESTART IDENTITY CASCADE"
             )
         )
         db.commit()

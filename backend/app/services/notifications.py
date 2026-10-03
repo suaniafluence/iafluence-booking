@@ -124,7 +124,8 @@ def send_last_session_thanks(mailer: Mailer, purchase_id: int) -> None:
         )
 
 
-def send_booking_confirmations(mailer: Mailer, booking_id: int) -> None:
+def send_booking_confirmations(mailer: Mailer, booking_id: int, nda: bool = False) -> None:
+    """`nda`: the customer ticked the box to receive the confidentiality agreement (told to the admin)."""
     with SessionLocal() as db:
         booking = db.get(Booking, booking_id)
         purchase, customer = booking.purchase, booking.customer
@@ -160,6 +161,7 @@ def send_booking_confirmations(mailer: Mailer, booking_id: int) -> None:
             meet_url=booking.meet_url,
             hours_purchased=purchase.hours_purchased,
             hours_remaining=purchase.hours_remaining,
+            nda=nda,
         )
         send_safely(mailer, settings.admin_email, "NOUVELLE RÉSERVATION — Conseil IA", admin_body)
 
@@ -190,7 +192,9 @@ def send_refund_alert(mailer: Mailer, purchase_id: int, full_refund: bool) -> No
         send_safely(mailer, settings.admin_email, "REMBOURSEMENT — Conseil IA", body)
 
 
-def send_discovery_confirmations(mailer: Mailer, booking_id: int, message: str | None = None) -> None:
+def send_discovery_confirmations(
+    mailer: Mailer, booking_id: int, message: str | None = None, nda: bool = False
+) -> None:
     """Free discovery call booked: the prospect's confirmation, and a heads-up to the admin with the topic."""
     with SessionLocal() as db:
         booking = db.get(Booking, booking_id)
@@ -220,6 +224,7 @@ def send_discovery_confirmations(mailer: Mailer, booking_id: int, message: str |
             meet_url=booking.meet_url,
             locale=locale,
             message=message,
+            nda=nda,
         )
         send_safely(mailer, settings.admin_email, "NOUVEL APPEL DÉCOUVERTE", admin_body)
 

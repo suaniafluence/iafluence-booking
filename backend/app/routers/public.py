@@ -22,7 +22,7 @@ from app.schemas import (
     PurchaseOut,
     Slot,
 )
-from app.services import booking_service, discovery, notifications, stripe_service
+from app.services import booking_service, discovery, nda, notifications, stripe_service
 from app.services.rate_limit import RateLimiter, client_ip
 from app.services.settings_service import get_settings
 
@@ -79,6 +79,8 @@ def booking_context(token: str, db: Session = Depends(get_db)):
         timezone=settings.timezone,
         booking_duration_min=settings.booking_duration_min,
         locale=purchase.locale,
+        nda_available=nda.available(db),
+        nda_sent=purchase.customer.nda_sent_at is not None,
     )
 
 
@@ -110,7 +112,9 @@ def create_booking(
     now: datetime = Depends(get_now),
 ):
     booking = booking_service.book(db, calendar, body.token, body.start, now, body.locale, body.timezone)
-    background.add_task(notifications.send_booking_confirmations, mailer, booking.id)
+    background.add_task(notifications.send_booking_confirmations, mailer, booking.id, nda=body.nda)
+    if body.nda:
+        background.add_task(nda.send_requested, mailer, booking.customer_id, booking.purchase.locale)
     tz = ZoneInfo(get_settings(db).timezone)
     return BookingConfirmedOut(
         status="confirmed",
@@ -131,6 +135,7 @@ def discovery_info(db: Session = Depends(get_db)):
         consultant_name=settings.consultant_name,
         timezone=settings.timezone,
         duration_min=settings.discovery_duration_min,
+        nda_available=nda.available(db),
     )
 
 
@@ -172,7 +177,11 @@ def book_discovery(
         locale=body.locale,
         customer_timezone=body.timezone,
     )
-    background.add_task(notifications.send_discovery_confirmations, mailer, booking.id, body.message or None)
+    background.add_task(
+        notifications.send_discovery_confirmations, mailer, booking.id, body.message or None, nda=body.nda
+    )
+    if body.nda:
+        background.add_task(nda.send_requested, mailer, booking.customer_id, booking.client_locale)
     tz = ZoneInfo(get_settings(db).timezone)
     return DiscoveryOut(
         start=booking.start_datetime.astimezone(tz), end=booking.end_datetime.astimezone(tz), meet_url=booking.meet_url
