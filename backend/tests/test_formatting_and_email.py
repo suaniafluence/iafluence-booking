@@ -211,7 +211,9 @@ def test_gmail_mailer_builds_utf8_message(monkeypatch):
     assert msg["Subject"] == "Votre rendez-vous est confirmé"
     assert msg["From"].addresses[0].addr_spec == "contact@iafluence.fr"
     assert msg["From"].addresses[0].display_name == "Suan Tay — IAfluence"
-    assert msg.get_content() == "Bonjour,\nÀ bientôt\n"
+    # Text first, then its HTML version in the IAfluence layout.
+    plain, html = msg.iter_parts()
+    assert plain.get_content() == "Bonjour,\nÀ bientôt\n" and html.get_content_type() == "text/html"
 
 
 def test_gmail_mailer_defaults_to_google_client_factory():
@@ -273,7 +275,8 @@ def test_gmail_mailer_creates_a_draft(monkeypatch):
     [(user_id, body)] = api.created
     assert user_id == "me"
     msg = email.message_from_bytes(base64.urlsafe_b64decode(body["message"]["raw"]), policy=policy.default)
-    assert (msg["To"], msg["Subject"], msg.get_content()) == ("jean@proton.me", "Prochaine session", "Bonjour\n")
+    plain = next(msg.iter_parts())
+    assert (msg["To"], msg["Subject"], plain.get_content()) == ("jean@proton.me", "Prochaine session", "Bonjour\n")
 
 
 def test_send_safely_as_draft():
@@ -369,3 +372,66 @@ def _report_ctx(item):
         "shop_url": "https://iafluence.fr",
         "consultant_name": "Suan Tay",
     }
+
+
+# --- the IAfluence layout ----------------------------------------------------------------------------------------
+
+CONFIRMATION = """Bonjour Ange,
+
+Votre appel est confirmé.
+
+Date :
+Mardi 13 octobre 2026
+
+Lien visio :
+https://meet.google.com/abc-defg-hij
+
+Réservez la suite ici :
+
+https://booking.iafluence.test/fr/reservation/tok
+
+Une question ? Écrivez à https://iafluence.fr.
+
+À bientôt,
+
+Suan Tay
+IAfluence
+"""
+
+
+def test_text_emails_get_an_html_version_in_the_layout(monkeypatch):
+    monkeypatch.setattr(email_service, "get_config", lambda: Config(mail_from="contact@iafluence.fr", public_base_url="https://booking.iafluence.test"))
+    msg = email.message_from_bytes(email_service.build_message("a@b.fr", "Confirmé", CONFIRMATION).as_bytes(), policy=policy.default)
+    plain, html = msg.get_payload()
+    assert plain.get_content() == CONFIRMATION
+    page = html.get_content()
+    assert '<html lang="fr">' in page and "<title>Confirmé</title>" in page
+    assert 'src="https://booking.iafluence.test/logo.jpg"' in page
+    # "Label :" + value: a card; a link alone: a button named after it; links in a sentence stay links.
+    assert ">Date</div>" in page and ">Mardi 13 octobre 2026</div>" in page
+    assert '<a href="https://meet.google.com/abc-defg-hij"' in page
+    assert ">Choisir mon créneau</a>" in page
+    assert '<a href="https://iafluence.fr" style="color:#2563C9;word-break:break-all;">https://iafluence.fr</a>.' in page
+    assert "<strong>Suan Tay</strong><br><span" in page
+    assert "Vos données personnelles" in page and "ni vendues ni utilisées à d'autres fins" in page
+
+
+@pytest.mark.parametrize(
+    ("greeting", "lang", "button"),
+    [
+        ("Hello Ange,", "en", "Pick my time"),
+        ("Hola, Ange:", "es", "Elegir mi horario"),
+        ("Hola:", "es", "Elegir mi horario"),
+        ("Client :\nAnge", "fr", "Choisir mon créneau"),
+    ],
+)
+def test_html_version_speaks_the_language_of_the_greeting(greeting, lang, button):
+    page = email_service.html_from_text(f"{greeting}\n\nhttps://x.test/en/reservation/t\n")
+    assert f'<html lang="{lang}">' in page and f">{button}</a>" in page
+    notice = {"fr": "Vos données personnelles", "en": "Your personal data", "es": "Sus datos personales"}
+    assert notice[lang] in page
+
+
+def test_html_version_escapes_the_text():
+    page = email_service.html_from_text("Bonjour <b>Ange</b> & co\n")
+    assert "Bonjour &lt;b&gt;Ange&lt;/b&gt; &amp; co" in page

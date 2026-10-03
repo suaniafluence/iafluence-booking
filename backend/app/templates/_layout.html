@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>{% block title %}IAfluence{% endblock %}</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+{#- Design system « Atelier · Bleu surligné »: nuit #0F1B33, bleu #2563C9, ardoise #55627A, trait #DFE5EE,
+    brume #EEF2F8, surlignage #CFE3FF, rayon 4px. Inline styles only: most email clients drop <style>. #}
+<body style="margin:0;padding:0;background:#EEF2F8;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF2F8;">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#FFFFFF;border:1px solid #DFE5EE;border-radius:4px;font-family:Figtree,Arial,Helvetica,sans-serif;color:#0F1B33;font-size:15px;line-height:1.6;">
+<tr><td style="background:#0F1B33;border-radius:4px 4px 0 0;padding:20px 28px;">
+<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+{#- The logo exists only as a JPG on white: on nuit it sits in a white 4px pill (design system, § Logo). #}
+<td style="background:#FFFFFF;border-radius:4px;padding:4px 6px;"><img src="{{ logo_url }}" alt="" width="34" height="28" style="display:block;width:34px;height:28px;border:0;"></td>
+<td style="padding-left:12px;font-family:'Bricolage Grotesque','Arial Black',Arial,sans-serif;font-weight:800;font-size:22px;line-height:1;letter-spacing:-0.02em;color:#FFFFFF;">IA<span style="box-shadow:inset 0 -0.32em 0 #2563C9;">fluence</span></td>
+</tr></table>
+</td></tr>
+{% block content %}{% endblock %}
+<tr><td style="background:#EEF2F8;border-top:1px solid #DFE5EE;border-radius:0 0 4px 4px;padding:16px 28px;font-size:12px;line-height:1.5;color:#55627A;">
+IAfluence · <a href="{{ site_url }}" style="color:#2563C9;text-decoration:none;">{{ site_url | replace('https://', '') | replace('http://', '') }}</a>
+<p style="margin:8px 0 0;font-size:11px;line-height:1.5;color:#55627A;">
+{% if lang == "en" %}
+Your personal data (name, email, our exchanges) is used by IAfluence only to follow up your AI consulting. It is never sold or used for any other purpose. To access, correct or delete it, simply reply to this email.
+{% elif lang == "es" %}
+Sus datos personales (nombre, correo electrónico, nuestros intercambios) solo los utiliza IAfluence para el seguimiento de su asesoramiento en IA. Nunca se venden ni se usan con otros fines. Para acceder a ellos, corregirlos o suprimirlos, basta con responder a este correo.
+{% else %}
+Vos données personnelles (nom, email, nos échanges) sont utilisées par IAfluence uniquement pour le suivi de votre accompagnement en conseil IA. Elles ne sont ni vendues ni utilisées à d'autres fins. Pour y accéder, les corriger ou les supprimer, répondez simplement à cet email.
+{% endif %}
+</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

@@ -275,5 +275,7 @@ def test_built_message_attaches_the_pdf():
     msg = message_from_bytes(build_message("a@example.com", "NDA", "Bonjour", attachments=[("NDA.pdf", PDF)]).as_bytes())
     assert msg.get_content_type() == "multipart/mixed"
     body, pdf = msg.get_payload()
-    assert body.get_payload(decode=True).decode().strip() == "Bonjour"
+    plain, html = body.get_payload()
+    assert plain.get_payload(decode=True).decode().strip() == "Bonjour"
+    assert html.get_content_type() == "text/html"
     assert (pdf.get_content_type(), pdf.get_filename(), pdf.get_payload(decode=True)) == ("application/pdf", "NDA.pdf", PDF)

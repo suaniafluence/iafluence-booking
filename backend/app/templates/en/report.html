@@ -1,14 +1,6 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Summary</title>
-</head>
-<body style="margin:0;padding:0;background:#f8fafc;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;">
-<tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;font-family:Arial,Helvetica,sans-serif;color:#1e293b;font-size:15px;line-height:1.55;">
+{% extends "_layout.html" %}
+{% block title %}Summary{% endblock %}
+{% block content %}
 <tr><td style="padding:28px 28px 8px;">
 <p style="margin:0 0 16px;">Hello {{ name }},</p>
 {% if kind == "discovery" %}
@@ -19,12 +11,12 @@
 </td></tr>
 {% if image_cid %}
 <tr><td style="padding:0 28px 8px;">
-<img src="cid:{{ image_cid }}" alt="Infographic of our discussion" width="544" style="display:block;width:100%;max-width:544px;height:auto;border-radius:12px;border:1px solid #e0e7ff;">
+<img src="cid:{{ image_cid }}" alt="Infographic of our discussion" width="544" style="display:block;width:100%;max-width:544px;height:auto;border-radius:4px;border:1px solid #DFE5EE;">
 </td></tr>
 {% endif %}
 {% for title, items in sections %}
 <tr><td style="padding:12px 28px 0;">
-<h2 style="margin:0 0 6px;font-size:16px;color:#4338ca;">{{ title }}</h2>
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque','Arial Black',Arial,sans-serif;font-weight:800;font-size:17px;letter-spacing:-0.01em;color:#0F1B33;">{{ title }}</h2>
 <ul style="margin:0;padding-left:20px;">
 {% for item in items %}
 <li style="margin:0 0 4px;">{{ item }}</li>
@@ -35,16 +27,12 @@
 <tr><td style="padding:20px 28px 0;">
 {% if kind == "discovery" %}
 <p style="margin:0 0 12px;">If you would like to take things further, our AI consulting packages are described here:</p>
-<p style="margin:0 0 12px;"><a href="{{ shop_url }}" style="display:inline-block;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:10px;">See the consulting packages</a></p>
+<p style="margin:0 0 12px;"><a href="{{ shop_url }}" style="display:inline-block;background:#2563C9;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:4px;">See the consulting packages</a></p>
 <p style="margin:0 0 20px;">You can also simply reply to this email to talk it over.</p>
 {% endif %}
 </td></tr>
 <tr><td style="padding:0 28px 28px;">
 <p style="margin:0;">Looking forward to speaking with you,</p>
-<p style="margin:12px 0 0;">{{ consultant_name }}<br>IAfluence</p>
+<p style="margin:12px 0 0;"><strong>{{ consultant_name }}</strong><br><span style="color:#55627A;">IAfluence</span></p>
 </td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>
+{% endblock %}
