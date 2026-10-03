@@ -39,6 +39,10 @@ class Customer(Base):
     siren: Mapped[str | None] = mapped_column(String(9))
     # Private notes of the consultant, never shown to the customer; given to the action plan agent.
     notes: Mapped[str | None] = mapped_column(Text)
+    # How the customer came: 'site' when created by the website, chosen by the consultant for a client added by
+    # hand (app.schemas.AcquisitionSource); `acquisition_detail` says more for 'autre'.
+    acquisition_source: Mapped[str | None] = mapped_column(String(32))
+    acquisition_detail: Mapped[str | None] = mapped_column(String(255))
     # Inactivity reminder (app.services.reminders): at most one per period of inactivity.
     reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

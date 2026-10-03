@@ -9,7 +9,7 @@ from tests.conftest import staff_login, ADMIN_PASSWORD, paris
 
 pytestmark = pytest.mark.usefixtures("db_clean")
 
-NEW = {"name": " Claire Durand ", "email": "Claire@Example.com", "hours": 4, "amount_cents": 48_000}
+NEW = {"name": " Claire Durand ", "email": "Claire@Example.com", "acquisition_source": "whatsapp", "hours": 4, "amount_cents": 48_000}
 
 
 def login(client):
@@ -37,6 +37,7 @@ def test_add_client_by_hand_creates_a_bookable_purchase_and_emails_the_link(clie
         )
         assert (purchase.hours_purchased, purchase.hours_booked, purchase.payment_status) == (4, 0, "paid")
         assert purchase.stripe_checkout_session_id.startswith("manual_") and purchase.stripe_payment_id is None
+        assert out["customer_id"] == purchase.customer_id and purchase.customer.acquisition_source == "whatsapp"
         assert db.scalar(select(BookingToken.token).where(BookingToken.purchase_id == purchase.id)) == token
 
     [mail] = fakes["mailer"].sent
@@ -67,11 +68,45 @@ def test_add_client_without_email_and_existing_customer_is_reused(client, fakes,
 
 @pytest.mark.parametrize(
     "bad",
-    [{"name": ""}, {"name": "   "}, {"name": "x" * 256}, {"email": "pas-un-email"}, {"hours": 0}, {"hours": 101}, {"amount_cents": -1}, {"product_name": ""}, {"product_name": " 	 "}],
+    [{"name": ""}, {"name": "   "}, {"name": "x" * 256}, {"email": "pas-un-email"}, {"hours": 0}, {"hours": 101}, {"amount_cents": -1},
+     {"acquisition_source": "pigeon"}, {"acquisition_source": None}, {"acquisition_detail": "x" * 256}],
 )
 def test_add_client_validates_input(client, bad):
     login(client)
     assert client.post("/api/consultant/clients", json={**NEW, **bad}).status_code == 422
+
+
+def test_add_client_without_hours_only_adds_them_to_the_follow_up(client, fakes):
+    login(client)
+    r = client.post(
+        "/api/consultant/clients",
+        json={"name": "Ange", "email": "ange@example.com", "acquisition_source": "autre", "acquisition_detail": " Salon ", "product_name": ""},
+    )
+    assert r.status_code == 201, r.text
+    out = r.json()
+    assert out["purchase_id"] is None and out["booking_url"] is None
+    assert fakes["mailer"].sent == []
+    with SessionLocal() as db:
+        customer = db.get(Customer, out["customer_id"])
+        assert (customer.acquisition_source, customer.acquisition_detail, customer.purchases) == ("autre", "Salon", [])
+    [row] = client.get("/api/consultant/learners").json()["learners"]
+    assert (row["customer_id"], row["status"]) == (out["customer_id"], "prospect")
+    detail = client.get(f"/api/consultant/learners/{out['customer_id']}").json()["customer"]
+    assert (detail["acquisition_source"], detail["acquisition_detail"]) == ("autre", "Salon")
+
+
+def test_acquisition_can_be_changed_on_the_learner_page(client):
+    login(client)
+    cid = client.post("/api/consultant/clients", json={"name": "Ange", "email": "ange@example.com", "acquisition_source": "whatsapp"}).json()["customer_id"]
+    r = client.patch(f"/api/consultant/learners/{cid}", json={"acquisition_source": "recommandation", "acquisition_detail": "Par Paul"})
+    assert (r.json()["acquisition_source"], r.json()["acquisition_detail"]) == ("recommandation", "Par Paul")
+    assert client.patch(f"/api/consultant/learners/{cid}", json={"acquisition_source": "pigeon"}).status_code == 422
+
+
+def test_website_customers_come_from_the_site(client, token_for):
+    token_for(email="web@example.com")
+    with SessionLocal() as db:
+        assert db.scalar(select(Customer.acquisition_source)) == "site"
 
 
 def test_toggle_auto_send_per_client(client, token_for):

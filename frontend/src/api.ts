@@ -83,7 +83,7 @@ export const api = {
   adminLogout: () => request<{ status: string }>("/api/admin/logout", { method: "POST" }),
   adminOverview: () => request<AdminOverview>("/api/consultant/overview"),
   adminAddClient: (client: NewClient) =>
-    request<{ purchase_id: number; booking_url: string }>("/api/consultant/clients", {
+    request<{ customer_id: number; purchase_id: number | null; booking_url: string | null }>("/api/consultant/clients", {
       method: "POST",
       body: JSON.stringify(client),
     }),
@@ -174,8 +174,17 @@ export const api = {
   // --- consultant cockpit ------------------------------------------------------------------------------------
   learners: (hidden = false) => request<LearnerList>(`/api/consultant/learners${hidden ? "?hidden=true" : ""}`),
   learner: (id: number) => request<LearnerDetail>(`/api/consultant/learners/${id}`),
-  updateLearner: (id: number, patch: { notes?: string; company_name?: string }) =>
-    request<{ customer_id: number; company_name: string | null; notes: string | null }>(`/api/consultant/learners/${id}`, {
+  updateLearner: (
+    id: number,
+    patch: { notes?: string; company_name?: string; acquisition_source?: AcquisitionSource; acquisition_detail?: string },
+  ) =>
+    request<{
+      customer_id: number;
+      company_name: string | null;
+      notes: string | null;
+      acquisition_source: AcquisitionSource | null;
+      acquisition_detail: string | null;
+    }>(`/api/consultant/learners/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
@@ -350,6 +359,8 @@ export type LearnerDetail = {
     company_name: string | null;
     siren: string | null;
     notes: string | null;
+    acquisition_source: AcquisitionSource | null;
+    acquisition_detail: string | null;
     auto_send_next_link: boolean;
     nda_sent_at: string | null;
     nda_signed_at: string | null;
@@ -470,11 +481,26 @@ export type FirefliesStatus = {
   detail: string | null;
 };
 
+/** How a customer came. "site" is set by the website; the others are chosen when adding a client by hand. */
+export const ACQUISITION_SOURCES = {
+  whatsapp: "WhatsApp",
+  recommandation: "Recommandation / bouche-à-oreille",
+  linkedin: "LinkedIn",
+  reseau: "Réseau / événement",
+  email_telephone: "Email ou téléphone",
+  site: "Site web",
+  autre: "Autre",
+} as const;
+export type AcquisitionSource = keyof typeof ACQUISITION_SOURCES;
+
 export type NewClient = {
   name: string;
   email: string;
-  hours: number;
-  product_name: string;
+  acquisition_source: AcquisitionSource;
+  acquisition_detail?: string;
+  /** Null: the client is only added to the follow-up, without a purchase or booking link. */
+  hours: number | null;
+  product_name?: string;
   amount_cents: number;
   send_link: boolean;
 };

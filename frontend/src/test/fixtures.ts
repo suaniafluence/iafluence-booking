@@ -297,6 +297,8 @@ export const learnerDetail = (over: Partial<LearnerDetail> = {}): LearnerDetail 
     company_name: "Dupont Conseil",
     siren: null,
     notes: "Très pressé",
+    acquisition_source: "whatsapp",
+    acquisition_detail: null,
     auto_send_next_link: false,
     nda_sent_at: null,
     nda_signed_at: null,

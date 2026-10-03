@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, ApiError, type LearnerDetail } from "../../api";
+import { ACQUISITION_SOURCES, api, ApiError, type AcquisitionSource, type LearnerDetail } from "../../api";
 import { CopyButton } from "../../components/CopyButton";
 import { SectionTitle } from "../../components/Icon";
 import { Alert, Button, Layout, Spinner } from "../../components/Layout";
@@ -135,10 +135,57 @@ function Detail({ data, onChange }: { data: LearnerDetail; onChange: () => void 
       <PlanPanel learnerId={c.id} plan={data.plan} onChange={onChange} />
       <CompanyPanel learnerId={c.id} company={data.company} onChange={onChange} />
       <ResearchPanel learnerId={c.id} research={data.research} onChange={onChange} />
+      <Acquisition id={c.id} source={c.acquisition_source} detail={c.acquisition_detail} />
       <Notes id={c.id} notes={c.notes} />
       <Timeline items={data.timeline} />
       <Purchases purchases={data.purchases} />
     </div>
+  );
+}
+
+function Acquisition({ id, source, detail }: { id: number; source: AcquisitionSource | null; detail: string | null }) {
+  const [value, setValue] = useState<AcquisitionSource | "">(source ?? "");
+  const [text, setText] = useState(detail ?? "");
+  const [state, setState] = useState<"idle" | "saved" | string>("idle");
+  const save = async () => {
+    if (!value) return;
+    try {
+      await api.updateLearner(id, { acquisition_source: value, acquisition_detail: value === "autre" ? text : "" });
+      setState("saved");
+    } catch (e) {
+      setState((e as ApiError).message);
+    }
+  };
+  return (
+    <section>
+      <SectionTitle icon="user-plus">Mode d’acquisition</SectionTitle>
+      <div className="mt-3 flex flex-wrap items-end gap-3 rounded border border-slate-200 bg-white p-5">
+        <label className="block text-sm">
+          <span className="text-slate-500">Comment ce client est arrivé</span>
+          <select value={value} onChange={(e) => setValue(e.target.value as AcquisitionSource)} className={field}>
+            <option value="" disabled>
+              Non renseigné
+            </option>
+            {Object.entries(ACQUISITION_SOURCES).map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {value === "autre" && (
+          <label className="block text-sm">
+            <span className="text-slate-500">Précisez</span>
+            <input value={text} maxLength={255} onChange={(e) => setText(e.target.value)} className={field} />
+          </label>
+        )}
+        <Button variant="secondary" className="min-h-9 px-3 text-sm" onClick={save} disabled={!value}>
+          Enregistrer
+        </Button>
+        {state === "saved" && <span className="text-sm text-slate-500">Enregistré.</span>}
+        {state !== "saved" && state !== "idle" && <Alert>{state}</Alert>}
+      </div>
+    </section>
   );
 }
 
