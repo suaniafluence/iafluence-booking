@@ -7,6 +7,7 @@ import { reportLabel, SessionReports } from "./SessionReports";
 
 const reports = (over: Partial<AdminOverview["reports"]> = {}): AdminOverview["reports"] => ({
   enabled: true,
+  paste_enabled: false,
   send_without_review: false,
   sessions: [finishedSession()],
   ...over,
@@ -281,5 +282,118 @@ describe("SessionReports", () => {
     expect(screen.getByText(/Désactivé : sans clé Fireflies ni Codex/)).toBeInTheDocument();
     expect(screen.getByText("Aucun rendez-vous terminé pour le moment.")).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
+  });
+});
+
+describe("Pasted transcripts", () => {
+  const TEXT = "Bonjour Marie, je suis Suan. ".repeat(10);
+
+  it("pastes the transcript of a session without a report, with the speakers known", async () => {
+    vi.spyOn(api, "adminPasteTranscript").mockResolvedValue({ report_id: 3, booking_id: 31 });
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<SessionReports reports={reports({ paste_enabled: true, sessions: [finishedSession(null)] })} onChange={onChange} />);
+    await user.click(screen.getByRole("button", { name: "Coller la transcription de Marie Martin" }));
+    const form = screen.getByRole("form", { name: "Transcription de Marie Martin" });
+    await user.selectOptions(within(form).getByLabelText("Nombre d’interlocuteurs"), "3");
+    await user.type(within(form).getByLabelText(/Noms/), "Suan, Marie Martin, ,Paul");
+    await user.click(within(form).getByLabelText("Transcription"));
+    await user.paste(TEXT);
+    expect(within(form).getByText("289 caractères")).toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: "Attribuer les interlocuteurs et résumer" }));
+    expect(api.adminPasteTranscript).toHaveBeenCalledWith(31, {
+      text: TEXT,
+      speaker_count: 3,
+      speaker_names: ["Suan", "Marie Martin", "Paul"],
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Transcription de Marie Martin reçue");
+    expect(screen.queryByRole("form")).not.toBeInTheDocument();
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows why a paste was refused and lets the consultant cancel", async () => {
+    vi.spyOn(api, "adminPasteTranscript").mockRejectedValue(new ApiError(409, "L'email de ce rendez-vous a déjà été préparé."));
+    const user = userEvent.setup();
+    const failed = finishedSession(sessionReport({ status: "failed", transcript_found: false }));
+    render(<SessionReports reports={reports({ paste_enabled: true, sessions: [failed] })} onChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "Coller la transcription de Marie Martin" }));
+    await user.click(screen.getByLabelText("Transcription"));
+    await user.paste(TEXT);
+    await user.click(screen.getByRole("button", { name: "Attribuer les interlocuteurs et résumer" }));
+    expect(api.adminPasteTranscript).toHaveBeenCalledWith(31, { text: TEXT, speaker_count: null, speaker_names: [] });
+    expect(await screen.findByRole("alert")).toHaveTextContent("déjà été préparé");
+    await user.click(screen.getByRole("button", { name: "Annuler" }));
+    expect(screen.queryByRole("form")).not.toBeInTheDocument();
+  });
+
+  it("offers no paste once the email is prepared, or without Codex", () => {
+    const { rerender } = render(<SessionReports reports={reports({ paste_enabled: true })} onChange={() => {}} />);
+    expect(screen.queryByRole("button", { name: /Coller la transcription/ })).not.toBeInTheDocument();
+    rerender(<SessionReports reports={reports({ sessions: [finishedSession(null)] })} onChange={() => {}} />);
+    expect(screen.queryByRole("button", { name: /Coller/ })).not.toBeInTheDocument();
+  });
+
+  it("shows who the agent found in a pasted transcript", () => {
+    const sessions = [
+      finishedSession(sessionReport({ source: "pasted", speakers: [{ nom: "Suan", role: "Consultant" }, { nom: "Marie", role: "" }] })),
+      finishedSession(sessionReport({ id: 8, status: "summarizing", source: "pasted", speakers: null }), { booking_id: 32 }),
+    ];
+    render(<SessionReports reports={reports({ sessions })} onChange={() => {}} />);
+    expect(screen.getByText("Transcription collée · 2 interlocuteurs : Suan (Consultant), Marie")).toBeInTheDocument();
+    expect(screen.getByText("Transcription collée · interlocuteurs en cours d’attribution")).toBeInTheDocument();
+  });
+
+  it("pastes a meeting held outside the site", async () => {
+    vi.spyOn(api, "adminPasteMeeting").mockResolvedValue({ report_id: 4, booking_id: 40 });
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<SessionReports reports={reports({ enabled: false, paste_enabled: true, sessions: [] })} onChange={onChange} />);
+    expect(screen.getByText(/Fireflies n’est pas connecté : collez la transcription/)).toBeInTheDocument();
+    expect(screen.queryByText("Autres réunions")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Coller une transcription" }));
+    const form = screen.getByRole("form", { name: "Transcription d’une autre réunion" });
+    await user.type(within(form).getByLabelText("Nom du destinataire"), "Claire Martin");
+    await user.type(within(form).getByLabelText("Email"), "claire@exemple.fr");
+    await user.type(within(form).getByLabelText(/Titre/), "  ");
+    await user.clear(within(form).getByLabelText("Date"));
+    await user.type(within(form).getByLabelText("Date"), "2026-10-08");
+    await user.clear(within(form).getByLabelText("Début"));
+    await user.type(within(form).getByLabelText("Début"), "10:30");
+    await user.selectOptions(within(form).getByLabelText("Durée"), "90");
+    await user.selectOptions(within(form).getByLabelText("Langue du compte rendu"), "en");
+    await user.click(within(form).getByLabelText("Transcription"));
+    await user.paste(TEXT);
+    await user.click(within(form).getByRole("button", { name: "Attribuer les interlocuteurs et résumer" }));
+    const start = new Date("2026-10-08T10:30");
+    expect(api.adminPasteMeeting).toHaveBeenCalledWith({
+      text: TEXT,
+      speaker_count: null,
+      speaker_names: [],
+      title: null,
+      start: start.toISOString(),
+      end: new Date(start.getTime() + 90 * 60_000).toISOString(),
+      name: "Claire Martin",
+      email: "claire@exemple.fr",
+      locale: "en",
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Transcription reçue pour Claire Martin");
+    expect(screen.queryByRole("form")).not.toBeInTheDocument();
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the meeting form open with the reason when it is refused", async () => {
+    vi.spyOn(api, "adminPasteMeeting").mockRejectedValue(new ApiError(422, "La transcription est trop courte."));
+    const user = userEvent.setup();
+    render(<SessionReports reports={reports({ paste_enabled: true, sessions: [] })} onChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "Coller une transcription" }));
+    await user.type(screen.getByLabelText("Nom du destinataire"), "Claire");
+    await user.type(screen.getByLabelText("Email"), "c@exemple.fr");
+    await user.click(screen.getByLabelText("Transcription"));
+    await user.paste(TEXT);
+    await user.click(screen.getByRole("button", { name: "Attribuer les interlocuteurs et résumer" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("trop courte");
+    expect(screen.getByLabelText("Nom du destinataire")).toHaveValue("Claire");
+    await user.click(screen.getByRole("button", { name: "Annuler" }));
+    expect(screen.getByRole("button", { name: "Coller une transcription" })).toBeInTheDocument();
   });
 });

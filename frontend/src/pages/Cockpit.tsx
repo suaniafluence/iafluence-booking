@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { ACQUISITION_SOURCES, api, ApiError, type AcquisitionSource, type AdminOverview, type NewClient } from "../api";
 import { CopyButton } from "../components/CopyButton";
-import { SectionTitle } from "../components/Icon";
+import { Icon, SectionTitle, type IconName } from "../components/Icon";
 import { Alert, Button, Layout, Spinner } from "../components/Layout";
 import { field, StaffLogin } from "../components/StaffLogin";
 import { euros, hm, hours, longDate } from "../format";
@@ -33,8 +33,8 @@ export default function Cockpit() {
 
   return (
     <Layout wide>
-      <div className="flex items-center justify-between">
-        <h1 className="text-[32px] font-extrabold leading-none text-slate-900">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-[26px] font-extrabold leading-none text-slate-900 sm:text-[32px]">
           Cockpit <span className="hl">consultant</span>
         </h1>
         <Button
@@ -75,10 +75,109 @@ function Kpi({ label, value, hint, dark = false }: { label: string; value: strin
   );
 }
 
+const TABS: { id: string; label: string; short: string; icon: IconName }[] = [
+  { id: "apprenants", label: "Apprenants", short: "Apprenants", icon: "graduation-cap" },
+  { id: "rendez-vous", label: "Prochains rendez-vous", short: "Rendez-vous", icon: "calendar-check" },
+  { id: "calendrier", label: "Imprimer mon calendrier", short: "Calendrier", icon: "printer" },
+  { id: "clients", label: "Clients", short: "Clients", icon: "users" },
+  { id: "nda", label: "Accord de confidentialité (NDA)", short: "NDA", icon: "file-pen" },
+  { id: "comptes-rendus", label: "Comptes rendus de séance", short: "Comptes rendus", icon: "notebook-pen" },
+];
+type TabId = (typeof TABS)[number]["id"];
+
+function tabFromHash(): TabId {
+  const id = window.location.hash.slice(1);
+  return TABS.some((t) => t.id === id) ? id : TABS[0].id;
+}
+
+/** One tab per part of the cockpit, kept in the URL (#comptes-rendus) so a reload or a shared link reopens it.
+ * Every panel stays mounted: a transcript being pasted is not lost when looking at another tab. */
+function Tabs({ panels }: { panels: Record<TabId, ReactNode> }) {
+  const [active, setActive] = useState<TabId>(tabFromHash);
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  useEffect(() => {
+    const onHash = () => setActive(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    // On a phone the bar scrolls sideways: keep the active tab in view.
+    refs.current[active]?.scrollIntoView?.({ block: "nearest", inline: "center" });
+  }, [active]);
+
+  const select = (id: TabId, focus = false) => {
+    setActive(id);
+    history.replaceState(null, "", `#${id}`);
+    if (focus) refs.current[id]?.focus();
+  };
+
+  const onKey = (e: KeyboardEvent) => {
+    const i = TABS.findIndex((t) => t.id === active);
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    select(TABS[(next + TABS.length) % TABS.length].id, true);
+  };
+
+  return (
+    <div>
+      <div className="sticky top-0 z-10 -mx-4 border-b border-slate-200 bg-white/95 backdrop-blur sm:mx-0 sm:rounded-t sm:border sm:border-b-slate-200">
+        <div
+          role="tablist"
+          aria-label="Sections du cockpit"
+          onKeyDown={onKey}
+          className="flex snap-x gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {TABS.map((t) => {
+            const selected = t.id === active;
+            return (
+              <button
+                key={t.id}
+                ref={(el) => {
+                  refs.current[t.id] = el;
+                }}
+                type="button"
+                role="tab"
+                id={`tab-${t.id}`}
+                aria-controls={`panel-${t.id}`}
+                aria-selected={selected}
+                aria-label={t.label}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => select(t.id)}
+                className={`flex min-h-12 shrink-0 snap-start items-center gap-2 whitespace-nowrap border-b-[3px] px-3 text-sm lg:gap-1.5 lg:px-2.5 font-semibold transition-colors focus:outline-none focus-visible:bg-brand-50 ${
+                  selected ? "border-brand-600 text-brand-700" : "border-transparent text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Icon name={t.icon} size={18} />
+                <span className="lg:hidden">{t.short}</span>
+                <span className="hidden lg:inline">{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {TABS.map((t) => (
+        <div
+          key={t.id}
+          role="tabpanel"
+          id={`panel-${t.id}`}
+          aria-labelledby={`tab-${t.id}`}
+          hidden={t.id !== active}
+          className="pt-6"
+        >
+          {panels[t.id]}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Dashboard({ data, onChange }: { data: AdminOverview; onChange: () => void }) {
   const k = data.kpis;
   return (
-    <div className="mt-8 space-y-10">
+    <div className="mt-6 space-y-6 sm:mt-8 sm:space-y-8">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Kpi dark label="Paiements du mois" value={String(k.payments_this_month)} hint={euros(k.revenue_this_month_cents)} />
         <Kpi label="Heures vendues" value={hours(k.hours_sold)} />
@@ -87,22 +186,25 @@ function Dashboard({ data, onChange }: { data: AdminOverview; onChange: () => vo
         <Kpi label="Heures à planifier" value={hours(k.hours_to_schedule)} hint={`${hours(k.hours_booked)} réservées`} />
       </div>
 
-      <Learners />
-
-      <Upcoming upcoming={data.upcoming} onChange={onChange} />
-
-      <CalendarPrint />
-
-      <Clients clients={data.clients} onChange={onChange} />
-
-      <NdaAgreement />
-
-      <SessionReports reports={data.reports} onChange={onChange} />
+      <Tabs
+        panels={{
+          apprenants: <Learners />,
+          "rendez-vous": <Upcoming upcoming={data.upcoming} onChange={onChange} />,
+          calendrier: <CalendarPrint />,
+          clients: <Clients clients={data.clients} onChange={onChange} />,
+          nda: <NdaAgreement />,
+          "comptes-rendus": <SessionReports reports={data.reports} onChange={onChange} />,
+        }}
+      />
     </div>
   );
 }
 
 type ClientRow = AdminOverview["clients"][number];
+
+// A table cell from `sm` up; below, a « label : value » line of the client's card.
+const CELL =
+  "flex items-center justify-between gap-3 py-1 before:font-normal before:text-slate-500 before:content-[attr(data-label)] sm:table-cell sm:px-5 sm:py-3 sm:before:content-none";
 
 function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => void }) {
   const [adding, setAdding] = useState(false);
@@ -185,9 +287,10 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
           <Alert>{error}</Alert>
         </div>
       )}
-      <div className="mt-3 overflow-x-auto rounded border border-slate-200 bg-white">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500">
+      <div className="mt-3 rounded border border-slate-200 bg-white sm:overflow-x-auto">
+        {/* On a phone each client is a card: one labelled line per column. */}
+        <table className="block w-full text-left text-sm sm:table sm:min-w-full">
+          <thead className="hidden bg-slate-50 text-slate-500 sm:table-header-group">
             <tr>
               <th className="px-5 py-3 font-medium">Client</th>
               <th className="px-5 py-3 font-medium">Prestation</th>
@@ -199,20 +302,23 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
               <th className="px-5 py-3 font-medium">Lien</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="block divide-y divide-slate-200 sm:table-row-group">
             {clients.map((c) => (
-              <tr key={c.purchase_id} className={c.payment_status === "refunded" ? "text-slate-400 line-through" : ""}>
-                <td className="px-5 py-3">
+              <tr
+                key={c.purchase_id}
+                className={`block px-4 py-3 sm:table-row sm:p-0 ${c.payment_status === "refunded" ? "text-slate-400 line-through" : ""}`}
+              >
+                <td className="block pb-1 sm:table-cell sm:px-5 sm:py-3">
                   <div className="font-bold text-slate-900">{c.name}</div>
                   <div className="text-slate-500">{c.email}</div>
                 </td>
-                <td className="px-5 py-3">
+                <td data-label="Prestation" className={CELL}>
                   {c.product}
                   {c.manual && (
                     <span className="ml-2 rounded-sm bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">manuel</span>
                   )}
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">
+                <td data-label="Achetées" className={`${CELL} text-right tabular-nums`}>
                   {editing?.purchaseId === c.purchase_id ? (
                     <form onSubmit={saveHours} className="flex items-center justify-end gap-2">
                       <input
@@ -251,12 +357,12 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
                     </>
                   )}
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">{hours(c.hours_booked)}</td>
-                <td className="px-5 py-3 text-right font-bold tabular-nums">{hours(c.hours_remaining)}</td>
-                <td className="px-5 py-3 text-slate-600">
+                <td data-label="Réservées" className={`${CELL} text-right tabular-nums`}>{hours(c.hours_booked)}</td>
+                <td data-label="Restantes" className={`${CELL} text-right font-bold tabular-nums`}>{hours(c.hours_remaining)}</td>
+                <td data-label="Prochaine session" className={`${CELL} text-slate-600`}>
                   {c.booking ? `${longDate(c.booking.start)} · ${hm(c.booking.start)}` : "—"}
                 </td>
-                <td className="px-5 py-3">
+                <td data-label="Envoi auto" className={CELL}>
                   <input
                     type="checkbox"
                     aria-label={`Envoi automatique pour ${c.name}`}
@@ -266,12 +372,12 @@ function Clients({ clients, onChange }: { clients: ClientRow[]; onChange: () => 
                     className="h-[18px] w-[18px] accent-brand-600"
                   />
                 </td>
-                <td className="px-5 py-3">{c.booking_url ? <CopyButton text={c.booking_url} /> : "—"}</td>
+                <td data-label="Lien" className={CELL}>{c.booking_url ? <CopyButton text={c.booking_url} /> : "—"}</td>
               </tr>
             ))}
             {clients.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-5 py-6 text-center text-slate-500">
+              <tr className="block sm:table-row">
+                <td colSpan={8} className="block px-5 py-6 text-center text-slate-500 sm:table-cell">
                   Aucun client pour le moment.
                 </td>
               </tr>

@@ -8,12 +8,15 @@ import Cockpit from "./Cockpit";
 
 const plain = (s: string | null) => (s ?? "").replace(/\p{Zs}/gu, " ");
 const unauthorized = () => new ApiError(401, "Authentification requise.");
-const renderCockpit = () =>
-  render(
+/** Opened on one tab, as from a link to /consultant#clients. */
+const renderCockpit = (tab = "") => {
+  window.history.replaceState(null, "", tab ? `#${tab}` : window.location.pathname);
+  return render(
     <MemoryRouter>
       <Cockpit />
     </MemoryRouter>,
   );
+};
 
 beforeEach(() => {
   vi.spyOn(api, "adminOverview").mockResolvedValue(overview());
@@ -35,7 +38,7 @@ describe("Cockpit", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Chargement…");
     data.resolve(overview());
 
-    await screen.findByRole("heading", { name: "Prochains rendez-vous" });
+    await screen.findByRole("tab", { name: "Prochains rendez-vous" });
     const kpi = (label: string) => screen.getByText(label).parentElement!;
     expect(plain(kpi("Paiements du mois").textContent)).toBe("Paiements du mois31 500,00 €");
     expect(kpi("Heures vendues")).toHaveTextContent("8 h");
@@ -48,7 +51,7 @@ describe("Cockpit", () => {
   });
 
   it("lists upcoming meetings with an optional Meet link", async () => {
-    renderCockpit();
+    renderCockpit("rendez-vous");
     const list = (await screen.findByRole("heading", { name: "Prochains rendez-vous" })).nextElementSibling as HTMLElement;
     const items = within(list).getAllByRole("listitem");
     expect(items).toHaveLength(2);
@@ -61,7 +64,7 @@ describe("Cockpit", () => {
   });
 
   it("lists clients, striking refunded purchases", async () => {
-    renderCockpit();
+    renderCockpit("clients");
     const rows = within((await screen.findAllByRole("table"))[0]).getAllByRole("row");
     expect(rows[0]).toHaveTextContent("ClientPrestationAchetéesRéservéesRestantesProchaine sessionEnvoi autoLien");
     const cells = (row: HTMLElement) => within(row).getAllByRole("cell").map((c) => c.textContent);
@@ -135,7 +138,7 @@ describe("Cockpit", () => {
     const saved = deferred<{ customer_id: number; auto_send_next_link: boolean }>();
     vi.spyOn(api, "adminSetAutoSend").mockReturnValue(saved.promise);
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("clients");
     const box = await screen.findByRole("checkbox", { name: "Envoi automatique pour Paul Rembourse" });
     expect(screen.getByText(/sinon il est préparé en brouillon dans Gmail/)).toBeInTheDocument();
 
@@ -157,7 +160,7 @@ describe("Cockpit", () => {
   it("shows an error when the auto-send choice cannot be saved", async () => {
     vi.spyOn(api, "adminSetAutoSend").mockRejectedValue(new ApiError(500, "Enregistrement impossible."));
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("clients");
     await user.click(await screen.findByRole("checkbox", { name: "Envoi automatique pour Paul Rembourse" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Enregistrement impossible.");
     expect(api.adminOverview).toHaveBeenCalledTimes(1);
@@ -171,7 +174,7 @@ describe("Cockpit", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    renderCockpit();
+    renderCockpit("clients");
     await user.click(await screen.findByRole("button", { name: "Copier le lien" }));
     expect(writeText).toHaveBeenCalledWith("https://booking.test/reservation/tokJ");
     expect(await screen.findByRole("button", { name: "Copié" })).toBeInTheDocument();
@@ -181,7 +184,7 @@ describe("Cockpit", () => {
     const writeText = vi.fn().mockRejectedValue(new Error("denied"));
     const user = userEvent.setup();
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    renderCockpit();
+    renderCockpit("clients");
     await user.click(await screen.findByRole("button", { name: "Copier le lien" }));
     expect(writeText).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Copier le lien" })).toBeInTheDocument();
@@ -191,7 +194,7 @@ describe("Cockpit", () => {
     const added = deferred<{ customer_id: number; purchase_id: number | null; booking_url: string | null }>();
     vi.spyOn(api, "adminAddClient").mockReturnValue(added.promise);
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("clients");
     await user.click(await screen.findByRole("button", { name: "Ajouter un client" }));
     expect(screen.queryByRole("button", { name: "Ajouter un client" })).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Heures achetées/)).toHaveValue(null);
@@ -233,7 +236,7 @@ describe("Cockpit", () => {
   it("adds a client met elsewhere with only a name, an email and how they came", async () => {
     vi.spyOn(api, "adminAddClient").mockResolvedValue({ customer_id: 9, purchase_id: null, booking_url: null });
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("clients");
     await user.click(await screen.findByRole("button", { name: "Ajouter un client" }));
     await user.type(screen.getByLabelText("Nom"), "Ange");
     await user.type(screen.getByLabelText("Email"), "ange@x.fr");
@@ -256,7 +259,7 @@ describe("Cockpit", () => {
   it("shows why a client could not be added and lets the admin cancel", async () => {
     vi.spyOn(api, "adminAddClient").mockRejectedValue(new ApiError(422, "Une erreur est survenue. Veuillez réessayer."));
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("clients");
     await user.click(await screen.findByRole("button", { name: "Ajouter un client" }));
     await user.type(screen.getByLabelText("Nom"), "C");
     await user.type(screen.getByLabelText("Email"), "c@x.fr");
@@ -275,7 +278,7 @@ describe("Cockpit", () => {
     const cancel = deferred<{ status: string }>();
     vi.spyOn(api, "adminCancelBooking").mockReturnValue(cancel.promise);
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("rendez-vous");
     await user.click(await screen.findByRole("button", { name: "Annuler la séance de Jean Dupont" }));
     expect(api.adminCancelBooking).not.toHaveBeenCalled();
     expect(screen.getByText(/l’heure est recréditée au client/)).toBeInTheDocument();
@@ -302,7 +305,7 @@ describe("Cockpit", () => {
     vi.mocked(api.adminOverview).mockResolvedValue(data);
     vi.spyOn(api, "adminCancelBooking").mockResolvedValue({ status: "cancelled" });
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("rendez-vous");
     await user.click(await screen.findByRole("button", { name: "Annuler l’appel découverte de Paul Prospect" }));
     expect(screen.getByText(/Google prévient le prospect/)).toBeInTheDocument();
     expect(screen.queryByLabelText("Envoyer au client son lien pour choisir un autre créneau")).not.toBeInTheDocument();
@@ -316,7 +319,7 @@ describe("Cockpit", () => {
   it("cancels without emailing the client when unticked", async () => {
     vi.spyOn(api, "adminCancelBooking").mockResolvedValue({ status: "cancelled" });
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("rendez-vous");
     await user.click(await screen.findByRole("button", { name: "Annuler la séance de Marie Martin" }));
     await user.click(screen.getByLabelText("Envoyer au client son lien pour choisir un autre créneau"));
     await user.click(screen.getByRole("button", { name: "Confirmer l’annulation" }));
@@ -334,7 +337,7 @@ describe("Cockpit", () => {
   it("keeps the session when the admin changes their mind or the cancellation fails", async () => {
     vi.spyOn(api, "adminCancelBooking").mockRejectedValue(new ApiError(502, "Rien n’a été annulé : réessayez."));
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("rendez-vous");
     await user.click(await screen.findByRole("button", { name: "Annuler la séance de Jean Dupont" }));
     await user.click(screen.getByRole("button", { name: "Confirmer l’annulation" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Rien n’a été annulé : réessayez.");
@@ -353,7 +356,7 @@ describe("Cockpit", () => {
     const saved = deferred<{ hours_purchased: number; hours_booked: number; hours_remaining: number }>();
     vi.spyOn(api, "adminSetHours").mockReturnValue(saved.promise);
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("clients");
     await user.click(await screen.findByRole("button", { name: "Modifier les heures de Jean Dupont" }));
     const input = screen.getByLabelText("Heures achetées par Jean Dupont");
     expect(input).toHaveValue(5);
@@ -376,7 +379,7 @@ describe("Cockpit", () => {
       new ApiError(422, "Impossible : 1 h sont déjà réservées ou réalisées pour ce client."),
     );
     const user = userEvent.setup();
-    renderCockpit();
+    renderCockpit("clients");
     await user.click(await screen.findByRole("button", { name: "Modifier les heures de Jean Dupont" }));
     await user.click(screen.getByRole("button", { name: "OK" }));
     expect(api.adminSetHours).toHaveBeenCalledWith(1, 5);
@@ -386,5 +389,55 @@ describe("Cockpit", () => {
     await user.click(screen.getByRole("button", { name: "Annuler la modification" }));
     expect(screen.queryByLabelText("Heures achetées par Jean Dupont")).not.toBeInTheDocument();
     expect(api.adminOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows one section per tab, kept in the URL, and keeps hidden tabs as they were", async () => {
+    const user = userEvent.setup();
+    renderCockpit();
+    const tabs = await screen.findAllByRole("tab");
+    expect(tabs.map((t) => t.getAttribute("aria-label"))).toEqual([
+      "Apprenants",
+      "Prochains rendez-vous",
+      "Imprimer mon calendrier",
+      "Clients",
+      "Accord de confidentialité (NDA)",
+      "Comptes rendus de séance",
+    ]);
+    expect(screen.getByRole("tab", { name: "Apprenants" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Apprenants");
+
+    await user.click(screen.getByRole("tab", { name: "Comptes rendus de séance" }));
+    expect(window.location.hash).toBe("#comptes-rendus");
+    expect(screen.getByRole("heading", { name: "Comptes rendus de séance" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Apprenants" })).not.toBeInTheDocument(); // hidden, not unmounted
+    await user.click(screen.getByRole("button", { name: "Coller une transcription" }));
+    const pasted = () => within(screen.getByRole("form", { name: /autre réunion/ }));
+    await user.type(pasted().getByLabelText("Nom du destinataire"), "Claire");
+
+    await user.click(screen.getByRole("tab", { name: "Clients" }));
+    await user.click(screen.getByRole("tab", { name: "Comptes rendus de séance" }));
+    expect(pasted().getByLabelText("Nom du destinataire")).toHaveValue("Claire");
+  });
+
+  it("opens the tab of the link and moves between tabs with the arrow keys", async () => {
+    const user = userEvent.setup();
+    renderCockpit("nda");
+    const nda = await screen.findByRole("tab", { name: "Accord de confidentialité (NDA)" });
+    expect(nda).toHaveAttribute("aria-selected", "true");
+    expect(nda).toHaveAttribute("tabindex", "0");
+    nda.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Comptes rendus de séance" })).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Apprenants" })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{End}");
+    expect(window.location.hash).toBe("#comptes-rendus");
+    await user.keyboard("{Home}{ArrowLeft}");
+    expect(window.location.hash).toBe("#comptes-rendus");
+  });
+
+  it("an unknown tab in the link opens the first one", async () => {
+    renderCockpit("inconnu");
+    expect(await screen.findByRole("tab", { name: "Apprenants" })).toHaveAttribute("aria-selected", "true");
   });
 });

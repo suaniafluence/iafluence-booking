@@ -160,10 +160,12 @@ class Booking(Base):
 
 
 class SessionReport(Base):
-    """Summary of a finished session, written by the Codex agent from the Fireflies transcript.
+    """Summary of a finished session, written by the Codex agent from the Fireflies transcript, or from a transcript
+    pasted by the consultant (app.services.pasted_transcripts).
 
     waiting_transcript -> summarizing -> ready -> drafted | failed (app.services.session_reports).
-    The transcript itself is never stored: only its Fireflies id, the summary and the infographic.
+    A Fireflies transcript is never stored: only its id, the summary and the infographic. A pasted one is kept only
+    until the summary is written (or the email drafted), at most REPORT_RETENTION_DAYS.
     """
 
     __tablename__ = "session_reports"
@@ -179,6 +181,13 @@ class SessionReport(Base):
     # A process summarizing the report holds it until then (Codex turns take minutes: no row lock meanwhile).
     claimed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fireflies_transcript_id: Mapped[str | None] = mapped_column(String(128))
+    # fireflies | pasted. A pasted transcript has no speaker names: Codex attributes them first, then the attributed
+    # lines replace the pasted text and `speakers` lists who was found ({"nom", "role"}).
+    transcript_source: Mapped[str] = mapped_column(String(16), server_default="fireflies", default="fireflies")
+    pasted_transcript: Mapped[str | None] = mapped_column(Text)
+    # What the consultant said about the speakers: {"nombre": int | None, "noms": [str]}.
+    speaker_hint: Mapped[dict | None] = mapped_column(JSONB)
+    speakers: Mapped[list | None] = mapped_column(JSONB)
     summary: Mapped[dict | None] = mapped_column(JSONB)
     image_png: Mapped[bytes | None] = mapped_column(LargeBinary)
     # Short reason shown in the admin — never transcript content.
@@ -199,6 +208,7 @@ class SessionReport(Base):
         CheckConstraint(
             "status IN ('waiting_transcript', 'summarizing', 'ready', 'drafted', 'failed')", name="report_status"
         ),
+        CheckConstraint("transcript_source IN ('fireflies', 'pasted')", name="report_transcript_source"),
         Index("ix_session_reports_status_next_attempt", "status", "next_attempt_at"),
         # A recording is summarized once, whether matched to a session or picked by the admin.
         Index(

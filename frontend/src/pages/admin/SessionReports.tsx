@@ -12,6 +12,7 @@ import { Alert } from "../../components/Layout";
 import { SectionTitle } from "../../components/Icon";
 import { hm, longDate } from "../../format";
 import { OtherMeetings } from "./OtherMeetings";
+import { PasteForBooking, PasteMeeting } from "./PasteTranscript";
 
 const SECTIONS: [keyof Synthese, string][] = [
   ["objectifs", "Objectifs"],
@@ -49,6 +50,13 @@ const TONES: Record<Tone, string> = {
   off: "bg-slate-100 text-slate-600 ring-slate-200",
 };
 
+function speakersLine(r: SessionReport): string | null {
+  if (r.source !== "pasted") return null;
+  if (!r.speakers) return "Transcription collée · interlocuteurs en cours d’attribution";
+  const who = r.speakers.map((s) => (s.role ? `${s.nom} (${s.role})` : s.nom)).join(", ");
+  return `Transcription collée · ${r.speakers.length} interlocuteur${r.speakers.length > 1 ? "s" : ""} : ${who}`;
+}
+
 function details(r: SessionReport): string | null {
   if (r.status === "waiting_transcript") {
     const parts = [`Fireflies interrogé ${r.transcript_attempts} fois`];
@@ -69,6 +77,8 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const [open, setOpen] = useState<number | null>(null);
+  // Booking whose pasted-transcript form is open.
+  const [pasting, setPasting] = useState<number | null>(null);
   // Shown at once, before the reloaded overview confirms it; dropped again if saving fails.
   const [withoutReview, setWithoutReview] = useState<boolean | null>(null);
 
@@ -105,7 +115,9 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
       <p className="mt-1 text-sm text-slate-500">
         {reports.enabled
           ? "À la fin de chaque séance ou appel découverte, la transcription Fireflies est résumée par votre agent Codex, puis l’email au client est préparé en brouillon dans Gmail avec la synthèse et l’infographie."
-          : "Désactivé : sans clé Fireflies ni Codex, l’email de fin de séance est préparé sans compte rendu."}
+          : reports.paste_enabled
+            ? "Fireflies n’est pas connecté : collez la transcription de votre téléphone pour obtenir le compte rendu. Sinon, l’email de fin de séance est préparé sans compte rendu."
+            : "Désactivé : sans clé Fireflies ni Codex, l’email de fin de séance est préparé sans compte rendu."}
       </p>
       <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
         <input
@@ -121,6 +133,15 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
           </span>
         </span>
       </label>
+      {reports.paste_enabled && (
+        <PasteMeeting
+          onCreated={(message) => {
+            setError(null);
+            setDone(message);
+            onChange();
+          }}
+        />
+      )}
       {reports.enabled && (
         <OtherMeetings
           onCreated={(message) => {
@@ -151,8 +172,10 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
             const idle = r !== null && (r.status === "waiting_transcript" || r.status === "failed");
             const previewable = r !== null && (r.synthese !== null || r.has_image);
             const gmailFailed = r !== null && r.status === "drafted" && r.delivery === "failed";
+            const pastable = reports.paste_enabled && (r === null || idle);
+            const who = r && speakersLine(r);
             return (
-              <li key={s.booking_id} className="px-5 py-4 text-sm">
+              <li key={s.booking_id} className="px-4 py-4 text-sm sm:px-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="font-bold text-slate-900">
@@ -169,13 +192,14 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                   </div>
                   <span className={`rounded-sm px-2.5 py-0.5 text-xs font-semibold ${TONES[tone]}`}>{label}</span>
                 </div>
+                {who && <p className="mt-1 text-xs text-slate-500">{who}</p>}
                 {info && <p className="mt-1 text-xs text-slate-500">{info}</p>}
                 {r?.error && <p className="mt-1 text-xs text-red-700">{r.error}</p>}
                 {r?.erased && (
                   <p className="mt-1 text-xs text-slate-500">Compte rendu effacé (durée de conservation écoulée).</p>
                 )}
-                {(previewable || idle || gmailFailed) && (
-                  <div className="mt-2 flex flex-wrap gap-4">
+                {(previewable || idle || gmailFailed || pastable) && (
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
                     {previewable && (
                       <button
                         type="button"
@@ -223,6 +247,16 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                         )}
                       </>
                     )}
+                    {pastable && pasting !== s.booking_id && (
+                      <button
+                        type="button"
+                        aria-label={`Coller la transcription de ${s.customer}`}
+                        className="font-medium text-brand-600 underline"
+                        onClick={() => setPasting(s.booking_id)}
+                      >
+                        Coller la transcription
+                      </button>
+                    )}
                     {gmailFailed && (
                       <button
                         type="button"
@@ -236,6 +270,19 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                       </button>
                     )}
                   </div>
+                )}
+                {pastable && pasting === s.booking_id && (
+                  <PasteForBooking
+                    bookingId={s.booking_id}
+                    customer={s.customer}
+                    onCancel={() => setPasting(null)}
+                    onDone={(message) => {
+                      setPasting(null);
+                      setError(null);
+                      setDone(message);
+                      onChange();
+                    }}
+                  />
                 )}
                 {previewable && open === r.id && <Preview session={s} report={r} />}
               </li>

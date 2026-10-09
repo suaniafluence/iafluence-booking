@@ -315,6 +315,18 @@ Facultatif : sans ces réglages, l’email de fin de séance reste celui de la V
 
 > ⚠️ **Conditions d’utilisation OpenAI** : un usage automatisé, côté serveur, de Codex avec un forfait ChatGPT (et non une clé API) doit être autorisé par les conditions en vigueur de votre forfait. À vérifier avant la mise en production ; sinon, passer à une clé API OpenAI côté `codex app-server` (petite adaptation : l’application n’accepte aujourd’hui qu’un compte ChatGPT).
 
+#### Transcription collée (téléphone, rendez-vous en présentiel)
+
+Codex suffit, sans Fireflies. Dans le cockpit, onglet *Comptes rendus* : **Coller la transcription** sur la ligne d’un rendez-vous terminé (séance ou appel découverte sans compte rendu, ou en échec), ou **Coller une transcription** pour une réunion hors réservation (destinataire, date, durée, langue). Indiquez le nombre d’interlocuteurs et leurs noms si vous les connaissez ; le plus simple est de les annoncer au début de l’enregistrement (« Bonjour, je suis Suan, avec Marie et son associé Paul »).
+
+Le texte est découpé en phrases numérotées, puis un second agent (`backend/app/codex_agent_speakers/*.md`) répond par des plages de phrases attribuées à chaque interlocuteur : il ne réécrit jamais le texte. Les répliques « Nom : texte » obtenues passent ensuite par le même agent de résumé, le même contrôle de l’infographie et le même brouillon Gmail que pour Fireflies. Le texte collé est conservé seulement jusqu’au résumé (ou au brouillon), au plus `REPORT_RETENTION_DAYS` ; après une attribution réussie, « Relancer » reprend directement au résumé.
+
+#### Serveur MCP (ChatGPT, Claude)
+
+Pour envoyer une conversation depuis ChatGPT (dictée au micro, mode vocal, enregistrement de réunion) ou Claude : dans `shared/.env`, `MCP_TOKEN=...` (`openssl rand -hex 32`, 32 caractères au moins), puis ajouter un connecteur MCP personnalisé d’URL `https://<domaine>/api/mcp/<MCP_TOKEN>` (ChatGPT : *Paramètres → Connecteurs → mode développeur* ; claude.ai : *Paramètres → Connecteurs → Ajouter un connecteur personnalisé*), sans authentification : le jeton est dans l’URL, gardez-la secrète et changez le jeton pour la révoquer. Un client qui sait envoyer un en-tête peut aussi utiliser `https://<domaine>/api/mcp` avec `Authorization: Bearer <MCP_TOKEN>`.
+
+Outils : `rendez_vous_termines` (lecture), `soumettre_transcription` (texte, nombre et noms des interlocuteurs, puis `booking_id` d’un rendez-vous, ou nom + email pour une autre réunion) et `etat_compte_rendu` (lecture). L’assistant ne peut qu’ajouter un compte rendu à relire : il n’envoie aucun email. Le serveur MCP n’allume pas le micro de ChatGPT : c’est ChatGPT qui transcrit, puis appelle l’outil avec le texte.
+
 Paramètres facultatifs : `FIREFLIES_MAX_WAIT_HOURS` (6), `CODEX_MODEL` (vide = modèle par défaut du forfait), `CODEX_TURN_TIMEOUT_SECONDS` (600), `REPORT_RETENTION_DAYS` (90 ; 0 = conservés). Mettez à jour votre registre des traitements RGPD : Fireflies et OpenAI traitent le contenu des séances.
 
 ### 5. Appel découverte sur iafluence.fr
@@ -358,7 +370,7 @@ UPDATE settings SET buffer_before_min = 15, buffer_after_min = 15, minimum_notic
 | PATCH | `/api/consultant/customers/{id}` `{auto_send_next_link}` | Lien de la session suivante : envoi automatique ou brouillon |
 | POST | `/api/consultant/bookings/{id}/cancel` `{notify}` | Annule une séance à venir, recrédite l’heure. 409 `not_cancellable` ; 502 `calendar_delete_failed` (rien n’est modifié) |
 | PATCH | `/api/consultant/purchases/{id}` `{hours_purchased}` | Ajuste les heures d’un achat (422 si inférieur aux heures réservées) |
-| GET | `/api/consultant/overview` → `reports` | `{enabled, send_without_review, sessions: [{booking_id, customer, start, …, report: {id, status, transcript_attempts, summary_attempts, error, synthese, has_image, delivery, with_summary, …} \| null}]}` |
+| GET | `/api/consultant/overview` → `reports` | `{enabled, paste_enabled, send_without_review, sessions: [{booking_id, customer, start, …, report: {id, status, source, speakers, transcript_attempts, summary_attempts, error, synthese, has_image, delivery, with_summary, …} | null}]}` |\| null}]}` |
 | GET | `/api/consultant/reports/{id}/image.png` | Infographie du compte rendu (admin uniquement, non mise en cache) |
 | POST | `/api/consultant/reports/{id}/retry` | « Relancer » : nouveau résumé si la transcription a été trouvée, sinon 6 h de recherche Fireflies de plus. 409 si un brouillon existe déjà ou si un résumé est en cours |
 | POST | `/api/consultant/reports/{id}/draft-without-summary` | Email V1, toujours en brouillon. 409 si déjà préparé, achat remboursé ou lien révoqué |
@@ -372,6 +384,9 @@ UPDATE settings SET buffer_before_min = 15, buffer_after_min = 15, minimum_notic
 | POST | `/api/discovery` `{name, email, start, message, locale, timezone, website}` | Réserve l’appel : 201 `{start, end, meet_url}` ; 409 `slot_taken` / `discovery_already_booked` ; 422 créneau non proposé ; 429 `too_many_attempts` ; 400 `rejected` (champ piège `website` rempli) |
 | GET | `/api/consultant/meetings` | « Autres réunions » : enregistrements Fireflies des 7 derniers jours `[{transcript_id, title, start, end, participants, suggested_email, suggested_name, report_id}]`. 409 sans Fireflies ni Codex ; 502 si Fireflies ne répond pas |
 | POST | `/api/consultant/meetings` `{transcript_id, title, start, end, name, email, locale}` | Demande le compte rendu de cette réunion : 201 `{report_id, booking_id}` ; 409 si l’enregistrement a déjà un compte rendu |
+| POST | `/api/consultant/bookings/{id}/transcript` `{text, speaker_count, speaker_names}` | Transcription collée pour un rendez-vous terminé : interlocuteurs attribués par Codex, puis résumé. 201 `{report_id, booking_id}` ; 409 si l’email est déjà préparé, un résumé en cours ou Codex absent ; 422 si le texte fait moins de 200 caractères |
+| POST | `/api/consultant/meetings/pasted` `{text, speaker_count, speaker_names, title, start, end, name, email, locale}` | Réunion hors réservation connue par sa seule transcription collée : 201 `{report_id, booking_id}`, toujours en brouillon |
+| POST | `/api/mcp/{MCP_TOKEN}` | Serveur MCP (JSON-RPC, Streamable HTTP sans session) : `initialize`, `tools/list`, `tools/call`. 404 sans `MCP_TOKEN`, 401 si le jeton est faux |
 | GET / POST / DELETE | `/api/admin/fireflies` | « Connexion Fireflies » : `{state: connected \| disconnected, source: admin \| server, email, name, detail}` ; POST `{api_key}` vérifie la clé auprès de Fireflies (400 si refusée) puis l’enregistre chiffrée ; DELETE l’efface. Jamais la clé en réponse |
 
 ## Hors MVP (évolutions prévues)

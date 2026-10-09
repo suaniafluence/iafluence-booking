@@ -1,5 +1,8 @@
 """Session reports: Fireflies transcript -> summary by the Codex agent -> Gmail draft to the client.
 
+A transcript pasted by the consultant (app.services.pasted_transcripts) starts at `summarizing`, and has its
+speakers attributed by another Codex turn before the summary.
+
     waiting_transcript -> summarizing -> ready -> drafted
                   \\             \\
                    \\             -> failed (Codex not connected, invalid output twice…) + admin alert
@@ -13,7 +16,7 @@ The end-of-session job (follow_up) creates the report instead of the V1 email. `
 - a report being summarized is claimed for the length of a Codex turn instead of holding a row lock;
 - emails leave after the commit, so a crash can lose one but never send it twice (same rule as follow_up).
 The transcript is read from Fireflies when needed and never stored nor logged: only the summary and the PNG are,
-for REPORT_RETENTION_DAYS.
+for REPORT_RETENTION_DAYS. A pasted transcript is stored until the summary is written or the email drafted.
 """
 
 import asyncio
@@ -31,7 +34,7 @@ from app.db import SessionLocal
 from app.i18n import text
 from app.models import Booking, SessionReport
 from app.services import formatting as fmt
-from app.services import fireflies_account, notifications, report_content
+from app.services import fireflies_account, notifications, pasted_transcripts, report_content
 from app.services.codex import CodexGateway, CodexNotConnected, CodexTurnFailed, CodexUnavailable
 from app.services.email_service import Mailer, render, send_safely
 from app.services.fireflies import FirefliesError, FirefliesGateway, TranscriptMeta, normalize_meet_url
@@ -52,6 +55,8 @@ SUBJECT_LAST = text("fr", "subject_report_last")
 SUBJECT_NEXT_V1 = text("fr", "subject_next_link")
 SUBJECT_LAST_V1 = text("fr", "subject_last_thanks")
 ALERT_SUBJECT = "COMPTE RENDU — action requise"
+NOT_CONNECTED = ("Codex n'est pas connecté.", "Connectez Codex dans l'admin, puis cliquez sur « Relancer ».")
+PASTE_AGAIN = "Collez à nouveau la transcription dans l'admin."
 RETRY_HINT = "Cliquez sur « Relancer » dans l'admin, ou sur « Créer le brouillon sans résumé »."
 GMAIL_FAILED = "L'email n'a pas pu être préparé dans Gmail (voir les logs de l'API)."
 
@@ -218,6 +223,7 @@ def _compose_other(db: Session, report: SessionReport, now: datetime, *, with_su
 
 def _drafted(report: SessionReport, now: datetime, email: Email, with_summary: bool) -> Email:
     report.status, report.claimed_until, report.next_attempt_at = "drafted", None, None
+    report.pasted_transcript = None
     report.delivery = "draft" if email.as_draft else "sent"
     report.with_summary = with_summary
     report.drafted_at = now
@@ -355,7 +361,9 @@ def _claim(now: datetime) -> int | None:
         )
         if report is None:
             return None
-        report.claimed_until = now + timedelta(seconds=get_config().codex_turn_timeout_seconds) + CLAIM_MARGIN
+        # A pasted transcript not attributed yet needs two turns: the speakers, then the summary.
+        turns = 2 if report.transcript_source == "pasted" and report.speakers is None else 1
+        report.claimed_until = now + turns * timedelta(seconds=get_config().codex_turn_timeout_seconds) + CLAIM_MARGIN
         db.commit()
         return report.id
 
@@ -414,6 +422,8 @@ def summarize(gw: Gateways, report_id: int, now: datetime) -> list[Email]:
         report = db.get(SessionReport, report_id)
         context = session_context(db, report.booking)
         transcript_id, waiting_since = report.fireflies_transcript_id, report.waiting_since
+        source, pasted = report.transcript_source, report.pasted_transcript
+        hint, attributed = report.speaker_hint, report.speakers is not None
 
     def failed(problem: str, action: str):
         def apply(db: Session, report: SessionReport) -> Email:
@@ -428,6 +438,17 @@ def summarize(gw: Gateways, report_id: int, now: datetime) -> list[Email]:
             report.next_attempt_at = now + poll_interval()
 
         return apply
+
+    if source == "pasted":
+        if not pasted:
+            return _finish(report_id, now, failed("Transcription collée effacée.", PASTE_AGAIN))
+        if attributed:
+            lines = pasted.splitlines()
+        else:
+            lines, problem = _attribute_speakers(gw.codex, report_id, context, hint, pasted)
+            if lines is None:
+                return _finish(report_id, now, failed(problem, RETRY_HINT))
+        return _summarize_lines(gw, report_id, now, context, lines, failed, "Transcription collée")
 
     try:
         sentences = gw.fireflies.sentences(transcript_id)
@@ -445,11 +466,15 @@ def summarize(gw: Gateways, report_id: int, now: datetime) -> list[Email]:
 
     lines = [f"{s.speaker} : {s.text}" for s in sentences]
     del sentences
+    return _summarize_lines(gw, report_id, now, context, lines, failed)
+
+
+def _summarize_lines(gw, report_id, now, context, lines, failed, label="Transcription Fireflies") -> list[Email]:
     instructions = report_content.agent_instructions()
     problem = None
     output = png = None
     for attempt in range(1, MAX_SUMMARY_ATTEMPTS + 1):
-        prompt = report_content.build_prompt(context, lines)
+        prompt = report_content.build_prompt(context, lines, label)
         if problem:
             prompt += f"\nTa réponse précédente a été refusée : {problem}. Respecte exactement le format demandé.\n"
         _count_attempt(report_id)
@@ -460,11 +485,7 @@ def summarize(gw: Gateways, report_id: int, now: datetime) -> list[Email]:
             png = report_content.render_png(output.image)
             break
         except CodexNotConnected:
-            return _finish(
-                report_id,
-                now,
-                failed("Codex n'est pas connecté.", "Connectez Codex dans l'admin, puis cliquez sur « Relancer »."),
-            )
+            return _finish(report_id, now, failed(*NOT_CONNECTED))
         except (report_content.InvalidOutput, CodexTurnFailed, CodexUnavailable) as e:
             problem = str(e)
             log.warning("report %s: summary attempt %d failed: %s", report_id, attempt, type(e).__name__)
@@ -474,9 +495,47 @@ def summarize(gw: Gateways, report_id: int, now: datetime) -> list[Email]:
     def ready(db: Session, report: SessionReport) -> None:
         report.summary = output.synthese.model_dump()
         report.image_png = png
+        report.pasted_transcript = None
         report.status, report.claimed_until, report.error = "ready", None, None
 
     return _finish(report_id, now, ready)
+
+
+def _attribute_speakers(codex: CodexGateway, report_id: int, context: dict, hint: dict | None, pasted: str):
+    """(« Name : text » lines, None), saved on the report so a retry skips this turn; or (None, the problem)."""
+    parts = pasted_transcripts.segments(pasted)
+    instructions = pasted_transcripts.agent_instructions()
+    problem = None
+    for attempt in range(1, MAX_SUMMARY_ATTEMPTS + 1):
+        prompt = pasted_transcripts.build_prompt(context, hint, parts)
+        if problem:
+            prompt += f"\nTa réponse précédente a été refusée : {problem}. Respecte exactement le format demandé.\n"
+        _count_attempt(report_id)
+        try:
+            output = pasted_transcripts.parse_output(
+                codex.run_turn(
+                    instructions=instructions, prompt=prompt, output_schema=pasted_transcripts.OUTPUT_SCHEMA
+                ),
+                len(parts),
+                hint,
+            )
+            break
+        except CodexNotConnected:
+            return None, NOT_CONNECTED[0]
+        except (report_content.InvalidOutput, CodexTurnFailed, CodexUnavailable) as e:
+            problem = str(e)
+            log.warning("report %s: speakers attempt %d failed: %s", report_id, attempt, type(e).__name__)
+    else:
+        return None, f"Interlocuteurs impossibles à attribuer : {problem}"
+    lines = pasted_transcripts.attribute(parts, output)
+    with SessionLocal() as db:
+        db.execute(
+            update(SessionReport)
+            .where(SessionReport.id == report_id, SessionReport.status == "summarizing")
+            .values(pasted_transcript="\n".join(lines), speakers=[s.model_dump() for s in output.interlocuteurs])
+        )
+        db.commit()
+    return lines, None
 
 
 def _count_attempt(report_id: int) -> None:
@@ -516,9 +575,13 @@ def erase_expired(now: datetime) -> None:
                 SessionReport.erased_at.is_(None),
                 SessionReport.status.in_(("drafted", "failed")),
                 SessionReport.created_at < now - timedelta(days=days),
-                or_(SessionReport.summary.is_not(None), SessionReport.image_png.is_not(None)),
+                or_(
+                    SessionReport.summary.is_not(None),
+                    SessionReport.image_png.is_not(None),
+                    SessionReport.pasted_transcript.is_not(None),
+                ),
             )
-            .values(summary=None, image_png=None, erased_at=now)
+            .values(summary=None, image_png=None, pasted_transcript=None, erased_at=now)
         )
         db.commit()
 
@@ -563,7 +626,7 @@ def retry(db: Session, report_id: int, now: datetime) -> SessionReport:
     """« Relancer » : summarize again if the transcript was found, otherwise look for it again for up to 6 h."""
     report = _locked(db, report_id)
     _ensure_idle(report, now)
-    if report.fireflies_transcript_id:
+    if report.fireflies_transcript_id or report.transcript_source == "pasted":
         report.status = "summarizing"
     else:
         report.status, report.waiting_since = "waiting_transcript", now
@@ -638,7 +701,10 @@ def overview(db: Session, tz: ZoneInfo, limit: int = 30) -> list[dict]:
             else {
                 "id": report.id,
                 "status": report.status,
-                "transcript_found": report.fireflies_transcript_id is not None,
+                "transcript_found": report.fireflies_transcript_id is not None
+                or report.transcript_source == "pasted",
+                "source": report.transcript_source,
+                "speakers": report.speakers,
                 "transcript_attempts": report.transcript_attempts,
                 "summary_attempts": report.summary_attempts,
                 "next_attempt_at": iso(report.next_attempt_at),

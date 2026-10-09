@@ -26,6 +26,8 @@ from app.schemas import (
     MeetingReportIn,
     NdaSendIn,
     NdaSignedIn,
+    PastedMeetingIn,
+    PastedTranscriptIn,
     PlanMessageIn,
     PlanValidateIn,
     PurchaseHoursIn,
@@ -41,6 +43,7 @@ from app.services import (
     meetings,
     nda,
     notifications,
+    pasted_transcripts,
     research,
     session_reports,
 )
@@ -152,6 +155,7 @@ def overview(db: Session = Depends(get_db), now: datetime = Depends(get_now)):
         ],
         "reports": {
             "enabled": session_reports.enabled(db),
+            "paste_enabled": pasted_transcripts.enabled(),
             "send_without_review": settings.send_reports_without_review,
             "sessions": session_reports.overview(db, tz),
         },
@@ -345,6 +349,45 @@ def create_meeting_report(body: MeetingReportIn, db: Session = Depends(get_db), 
     except meetings.MeetingError as e:
         raise HTTPException(e.status_code, e.message)
     return {"report_id": report.id, "booking_id": report.booking_id}
+
+
+def _paste_action(action):
+    if not pasted_transcripts.enabled():
+        raise HTTPException(409, "Connectez d'abord Codex.")
+    try:
+        report = action()
+    except pasted_transcripts.PasteError as e:
+        raise HTTPException(e.status_code, e.message)
+    return {"report_id": report.id, "booking_id": report.booking_id}
+
+
+@router.post("/bookings/{booking_id}/transcript", status_code=201, dependencies=[Depends(require_consultant)])
+def paste_transcript(
+    booking_id: int, body: PastedTranscriptIn, db: Session = Depends(get_db), now: datetime = Depends(get_now)
+):
+    """« Coller une transcription » for a finished session or call: speakers attributed by Codex, then the summary."""
+    hint = pasted_transcripts.hint_of(body.speaker_count, body.speaker_names)
+    return _paste_action(lambda: pasted_transcripts.attach(db, booking_id, body.text, hint, now))
+
+
+@router.post("/meetings/pasted", status_code=201, dependencies=[Depends(require_consultant)])
+def paste_meeting(body: PastedMeetingIn, db: Session = Depends(get_db), now: datetime = Depends(get_now)):
+    """A meeting held outside the site, known only by the transcript pasted from the consultant's phone."""
+    hint = pasted_transcripts.hint_of(body.speaker_count, body.speaker_names)
+    return _paste_action(
+        lambda: pasted_transcripts.create_meeting(
+            db,
+            text=body.text,
+            hint=hint,
+            title=body.title or None,
+            start=body.start,
+            end=body.end,
+            name=body.name,
+            email=str(body.email).lower(),
+            locale=body.locale,
+            now=now,
+        )
+    )
 
 
 # --- confidentiality agreement (NDA) ---------------------------------------------------------------------------

@@ -156,6 +156,33 @@ class MeetingReportIn(BaseModel):
     locale: Literal["fr", "en", "es"] = "fr"
 
 
+# Blank names are dropped (app.services.pasted_transcripts.hint_of).
+SpeakerName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=80)]
+# Bounds checked again (with a French message) by app.services.pasted_transcripts.
+PastedText = Annotated[str, StringConstraints(max_length=400_000)]
+
+
+class SpeakersIn(BaseModel):
+    """What the consultant knows about who speaks in a pasted transcript."""
+
+    speaker_count: Annotated[int, Field(ge=1, le=10)] | None = None
+    speaker_names: Annotated[list[SpeakerName], Field(max_length=10)] = []
+
+
+class PastedTranscriptIn(SpeakersIn):
+    text: PastedText
+
+
+class PastedMeetingIn(SpeakersIn):
+    text: PastedText
+    title: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None
+    start: AwareDatetime
+    end: AwareDatetime
+    name: Label
+    email: EmailStr
+    locale: Literal["fr", "en", "es"] = "fr"
+
+
 class NdaSendIn(BaseModel):
     name: Label
     email: EmailStr

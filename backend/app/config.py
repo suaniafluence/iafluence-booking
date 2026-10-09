@@ -57,6 +57,10 @@ class Config(BaseSettings):
     # Summaries and infographics are personal data: erased from the database after this many days. 0 = kept.
     report_retention_days: int = 90
 
+    # MCP server (app.routers.mcp) for ChatGPT / Claude connectors: paste a transcript from a conversation, follow its
+    # report. Reached at {PUBLIC_BASE_URL}/api/mcp/{MCP_TOKEN}. Empty = off. At least 32 characters.
+    mcp_token: str = ""
+
     # Local demo only: replace Google/Stripe/Gmail/Fireflies/Codex with in-memory fakes (see app/dev_fakes.py).
     fake_integrations: bool = False
     # Demo only: also write every email as a .eml file in this directory (E2E checks, example drafts).
