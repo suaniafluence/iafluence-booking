@@ -113,7 +113,7 @@ export const overview = (over: Partial<AdminOverview> = {}): AdminOverview => ({
       booking: null,
     },
   ],
-  reports: { enabled: true, send_without_review: false, sessions: [] },
+  reports: { enabled: true, paste_enabled: true, send_without_review: false, sessions: [] },
   ...over,
 });
 
@@ -140,6 +140,8 @@ export const sessionReport = (over: Partial<SessionReport> = {}): SessionReport 
   with_summary: true,
   drafted_at: "2026-10-08T15:12:00+02:00",
   erased: false,
+  source: "fireflies",
+  speakers: null,
   ...over,
 });
 

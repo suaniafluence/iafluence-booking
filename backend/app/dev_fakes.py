@@ -196,6 +196,8 @@ class DemoCodex:
             return demo_plan(prompt)
         if "activite_reelle" in properties:
             return demo_research(prompt)
+        if "interlocuteurs" in properties:
+            return demo_speakers(prompt)
         ctx = json.loads(prompt.split("Contexte de la séance (JSON) :\n", 1)[1].split("\n\nTranscription", 1)[0])
         number, client = ctx.get("seance_numero"), ctx["client"]
         last = ctx.get("derniere_seance", False)
@@ -216,6 +218,18 @@ class DemoCodex:
         }
         image = demo_infographic(number, client, synthese, heading)
         return json.dumps({"synthese": synthese, "image": image}, ensure_ascii=False)
+
+
+def demo_speakers(prompt: str) -> str:
+    """The consultant and the client take turns, one segment each (or the speakers announced)."""
+    ctx = json.loads(prompt.split("Contexte du rendez-vous (JSON) :\n", 1)[1].split("\n\nTranscription", 1)[0])
+    count = int(prompt.split("Transcription collée, ", 1)[1].split(" segments", 1)[0])
+    announced = ctx.get("interlocuteurs_annonces", {})
+    names = announced.get("noms") or [ctx["consultant"], ctx["client"]]
+    names = names[: announced.get("nombre") or len(names)]
+    speakers = [{"nom": n, "role": "Consultant IAfluence" if i == 0 else "Participant"} for i, n in enumerate(names)]
+    turns = [{"debut": i, "fin": i, "interlocuteur": (i - 1) % len(names) + 1} for i in range(1, count + 1)]
+    return json.dumps({"interlocuteurs": speakers, "tours": turns}, ensure_ascii=False)
 
 
 def _dossier(prompt: str) -> dict:

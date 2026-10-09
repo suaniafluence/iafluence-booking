@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_config
 from app.deps import get_codex, get_fireflies, get_mailer, get_now
-from app.routers import admin, auth, consultant, public, webhooks
+from app.routers import admin, auth, consultant, mcp, public, webhooks
 from app.services import action_plans, follow_up, session_reports
 from app.services.booking_service import AlreadyBooked, BookingError
 
@@ -41,6 +41,7 @@ app.include_router(webhooks.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(consultant.router)
+app.include_router(mcp.router)
 
 
 @app.exception_handler(BookingError)

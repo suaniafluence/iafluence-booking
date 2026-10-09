@@ -133,6 +133,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(meeting),
     }),
+  /** A transcript pasted from the phone, for a finished session or call: speakers attributed by Codex, then summary. */
+  adminPasteTranscript: (bookingId: number, paste: PastedTranscript) =>
+    request<{ report_id: number; booking_id: number }>(`/api/consultant/bookings/${bookingId}/transcript`, {
+      method: "POST",
+      body: JSON.stringify(paste),
+    }),
+  /** A meeting held outside the site, known only by its pasted transcript. */
+  adminPasteMeeting: (meeting: PastedMeeting) =>
+    request<{ report_id: number; booking_id: number }>("/api/consultant/meetings/pasted", {
+      method: "POST",
+      body: JSON.stringify(meeting),
+    }),
   adminNda: () => request<NdaOverview>("/api/consultant/nda"),
   /** The NDA already signed by the consultant, sent as the raw PDF. */
   adminNdaUpload: (locale: string, file: File) =>
@@ -437,6 +449,9 @@ export type SessionReport = {
   with_summary: boolean | null;
   drafted_at: string | null;
   erased: boolean;
+  /** pasted: copied from the phone by the consultant, speakers attributed by Codex (`speakers`, once done). */
+  source: "fireflies" | "pasted";
+  speakers: { nom: string; role: string }[] | null;
 };
 
 /** session: paid consulting session; discovery: free call booked on /decouverte; meeting: booked elsewhere. */
@@ -532,7 +547,8 @@ export type AdminOverview = {
     created_at: string;
     booking: BookingInfo | null;
   }[];
-  reports: { enabled: boolean; send_without_review: boolean; sessions: FinishedSession[] };
+  /** enabled: Fireflies + Codex; paste_enabled: Codex only (pasted transcripts). */
+  reports: { enabled: boolean; paste_enabled: boolean; send_without_review: boolean; sessions: FinishedSession[] };
 };
 
 export type DiscoveryInfo = { consultant_name: string; timezone: string; duration_min: number; nda_available: boolean };
@@ -564,6 +580,22 @@ export type Meeting = {
 
 export type MeetingReportRequest = {
   transcript_id: string;
+  title: string | null;
+  start: string;
+  end: string;
+  name: string;
+  email: string;
+  locale: string;
+};
+
+export type PastedTranscript = {
+  text: string;
+  /** Null: the agent works it out from the conversation. */
+  speaker_count: number | null;
+  speaker_names: string[];
+};
+
+export type PastedMeeting = PastedTranscript & {
   title: string | null;
   start: string;
   end: string;

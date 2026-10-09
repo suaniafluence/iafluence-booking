@@ -94,6 +94,8 @@ def test_overview_lists_finished_sessions_with_their_report(ended, admin, fakes)
             "with_summary": None,
             "drafted_at": None,
             "erased": False,
+            "source": "fireflies",
+            "speakers": None,
         },
     }
 
