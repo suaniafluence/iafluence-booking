@@ -527,6 +527,15 @@ def update_learner(
     }
 
 
+@router.delete("/learners/{customer_id}")
+def delete_learner(
+    customer_id: int, db: Session = Depends(get_db), staff: Staff = Depends(require_consultant)
+):
+    """Permanently delete a learner and all of their associated data."""
+    learners.remove(db, _learner(db, staff, customer_id))
+    return {"status": "deleted"}
+
+
 def _company_call(action):
     try:
         return action()

@@ -180,6 +180,7 @@ def test_a_consultant_sees_only_their_learners(cockpit):
     names = [r["name"] for r in cockpit.get("/api/consultant/learners").json()["learners"]]
     assert names == ["Sans consultant"]
     assert cockpit.get(f"/api/consultant/learners/{other}").status_code == 404
+    assert cockpit.delete(f"/api/consultant/learners/{other}").status_code == 404
     assert cockpit.get(f"/api/consultant/learners/{mine}").status_code == 200
 
 
@@ -253,6 +254,31 @@ def test_reinvite_discovery_rejects_unavailable_cases(cockpit, fakes):
     assert response.json()["code"] == "slot_taken"
     with SessionLocal() as db:
         assert db.get(Booking, future).status == "cancelled"
+
+
+def test_delete_learner_removes_all_owned_data(cockpit):
+    customer_id = add_customer("Exemple à supprimer", "exemple@example.com")
+    purchase_id = add_purchase(customer_id, 1)
+    booking_id = add_booking(customer_id, paris(2026, 9, 20, 10), purchase_id=purchase_id)
+    add_report(booking_id)
+    with SessionLocal() as db:
+        db.add(CustomerProfile(customer_id=customer_id, research_status="ready"))
+        db.add(ActionPlan(customer_id=customer_id, purchase_id=purchase_id, status="ready"))
+        db.commit()
+
+    response = cockpit.delete(f"/api/consultant/learners/{customer_id}")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "deleted"}
+    assert cockpit.get(f"/api/consultant/learners/{customer_id}").status_code == 404
+    with SessionLocal() as db:
+        assert db.get(Customer, customer_id) is None
+        assert db.get(Purchase, purchase_id) is None
+        assert db.get(Booking, booking_id) is None
+        assert db.scalar(select(BookingToken).where(BookingToken.purchase_id == purchase_id)) is None
+        assert db.scalar(select(SessionReport).where(SessionReport.booking_id == booking_id)) is None
+        assert db.get(CustomerProfile, customer_id) is None
+        assert db.scalar(select(ActionPlan).where(ActionPlan.customer_id == customer_id)) is None
 
 
 def test_notes_and_company_name(cockpit, jean):

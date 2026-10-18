@@ -12,11 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import Staff
-from app.models import ActionPlan, Booking, Customer, CustomerProfile, Purchase, SessionReport, Settings
+from app.models import ActionPlan, Booking, BookingToken, Customer, CustomerProfile, Purchase, SessionReport, Settings
 from app.services import notifications, session_reports
 from app.services.settings_service import get_settings
 
@@ -201,6 +201,18 @@ def rows(db: Session, staff: Staff, now: datetime, include_hidden: bool = False)
 
 def get_customer(db: Session, staff: Staff, customer_id: int) -> Customer | None:
     return db.scalar(scoped(select(Customer).where(Customer.id == customer_id), staff))
+
+
+def remove(db: Session, customer: Customer) -> None:
+    """Permanently remove a learner and every record owned by them."""
+    booking_ids = select(Booking.id).where(Booking.customer_id == customer.id)
+    purchase_ids = select(Purchase.id).where(Purchase.customer_id == customer.id)
+    db.execute(delete(SessionReport).where(SessionReport.booking_id.in_(booking_ids)))
+    db.execute(delete(Booking).where(Booking.customer_id == customer.id))
+    db.execute(delete(BookingToken).where(BookingToken.purchase_id.in_(purchase_ids)))
+    db.execute(delete(Purchase).where(Purchase.customer_id == customer.id))
+    db.delete(customer)
+    db.commit()
 
 
 def timeline(db: Session, customer_id: int, tz: ZoneInfo, now: datetime) -> list[dict]:

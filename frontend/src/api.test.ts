@@ -251,6 +251,7 @@ describe("api", () => {
     await call(api.learners(), "/api/consultant/learners");
     await call(api.learners(true), "/api/consultant/learners?hidden=true");
     await call(api.learner(4), "/api/consultant/learners/4");
+    await call(api.deleteLearner(4), "/api/consultant/learners/4", "DELETE");
     await call(api.updateLearner(4, { notes: "n" }), "/api/consultant/learners/4", "PATCH", { notes: "n" });
     await call(api.companySearch(4), "/api/consultant/learners/4/company/search");
     await call(api.companySearch(4, "a&b"), "/api/consultant/learners/4/company/search?q=a%26b");

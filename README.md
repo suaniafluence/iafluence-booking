@@ -362,7 +362,7 @@ UPDATE settings SET buffer_before_min = 15, buffer_after_min = 15, minimum_notic
 | GET / PATCH | `/api/admin/settings` | `{reminder_enabled, reminder_after_days, reminder_auto_send, hide_after_days}` (422 si le masquage n’est pas après la relance) |
 | GET | `/api/consultant/overview` | Indicateurs, prochains rendez-vous, clients, comptes rendus |
 | GET | `/api/consultant/learners?hidden=` | Apprenants : temps, rythme, fin estimée, inactivité, alertes ; `hidden_count` |
-| GET / PATCH | `/api/consultant/learners/{id}` | Fiche complète ; PATCH `{notes, company_name}` |
+| GET / PATCH / DELETE | `/api/consultant/learners/{id}` | Fiche complète ; PATCH `{notes, company_name}` ; DELETE supprime définitivement l'apprenant et ses données |
 | GET / PUT / DELETE | `/api/consultant/learners/{id}/company[/search?q=]` | Annuaire officiel : candidats, PUT `{siren}` associe, DELETE retire |
 | POST | `/api/consultant/learners/{id}/research` | Recherche web par Codex (202 ; 409 si déjà en cours ou Codex non configuré) |
 | POST / PATCH | `/api/consultant/learners/{id}/plan`, `…/plan/messages` `{message}` | Génère / régénère le plan, message au chat (202, réponse au rafraîchissement suivant ; 409 si un tour est en cours) ; PATCH `{validated}` |

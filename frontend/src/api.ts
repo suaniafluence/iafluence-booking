@@ -190,6 +190,8 @@ export const api = {
   // --- consultant cockpit ------------------------------------------------------------------------------------
   learners: (hidden = false) => request<LearnerList>(`/api/consultant/learners${hidden ? "?hidden=true" : ""}`),
   learner: (id: number) => request<LearnerDetail>(`/api/consultant/learners/${id}`),
+  deleteLearner: (id: number) =>
+    request<{ status: "deleted" }>(`/api/consultant/learners/${id}`, { method: "DELETE" }),
   updateLearner: (
     id: number,
     patch: { notes?: string; company_name?: string; acquisition_source?: AcquisitionSource; acquisition_detail?: string },

@@ -69,6 +69,39 @@ describe("Learners", () => {
     expect(link.closest("li")).toHaveClass("opacity-60");
   });
 
+  it("asks for confirmation before permanently deleting a learner", async () => {
+    vi.spyOn(api, "deleteLearner").mockResolvedValue({ status: "deleted" });
+    const user = userEvent.setup();
+    show();
+
+    await user.click(await screen.findByRole("button", { name: "Supprimer Jean Dupont" }));
+    expect(api.deleteLearner).not.toHaveBeenCalled();
+    expect(screen.getByText("Supprimer définitivement Jean Dupont ?")).toBeInTheDocument();
+    expect(screen.getByText(/Cette action est irréversible/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Annuler" }));
+    expect(screen.queryByText("Supprimer définitivement Jean Dupont ?")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Supprimer Jean Dupont" }));
+    await user.click(screen.getByRole("button", { name: "Confirmer la suppression" }));
+
+    expect(api.deleteLearner).toHaveBeenCalledWith(7);
+    expect(await screen.findByText("Aucun apprenant actif.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Jean Dupont/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps the learner visible when deletion fails", async () => {
+    vi.spyOn(api, "deleteLearner").mockRejectedValue(new ApiError(500, "Suppression impossible."));
+    const user = userEvent.setup();
+    show();
+
+    await user.click(await screen.findByRole("button", { name: "Supprimer Jean Dupont" }));
+    await user.click(screen.getByRole("button", { name: "Confirmer la suppression" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Suppression impossible.");
+    expect(screen.getByRole("link", { name: /Jean Dupont/ })).toBeInTheDocument();
+  });
+
   it("shows a load error", async () => {
     vi.mocked(api.learners).mockRejectedValue(new ApiError(500, "Erreur serveur."));
     show();
