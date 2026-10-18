@@ -203,7 +203,7 @@ def get_customer(db: Session, staff: Staff, customer_id: int) -> Customer | None
     return db.scalar(scoped(select(Customer).where(Customer.id == customer_id), staff))
 
 
-def timeline(db: Session, customer_id: int, tz: ZoneInfo) -> list[dict]:
+def timeline(db: Session, customer_id: int, tz: ZoneInfo, now: datetime) -> list[dict]:
     """Every call and session, newest first, with its summary while it is kept."""
     rows_ = db.execute(
         select(Booking, SessionReport)
@@ -222,6 +222,7 @@ def timeline(db: Session, customer_id: int, tz: ZoneInfo) -> list[dict]:
             "end": _iso(b.end_datetime, tz),
             "meet_url": b.meet_url,
             "message": b.message,
+            "can_reinvite": b.kind == "discovery" and b.status == "cancelled" and b.start_datetime > now,
             "report": None
             if r is None
             else {"id": r.id, "status": r.status, "synthese": r.summary, "erased": r.erased_at is not None},
@@ -287,7 +288,7 @@ def detail(db: Session, customer: Customer, now: datetime) -> dict:
             }
             for p in purchases
         ],
-        "timeline": timeline(db, customer.id, tz),
+        "timeline": timeline(db, customer.id, tz, now),
         "company": profile.company if profile else None,
         "company_fetched_at": _iso(profile.company_fetched_at, tz) if profile else None,
         "research": {

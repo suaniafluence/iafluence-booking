@@ -92,6 +92,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ notify }),
     }),
+  reinviteDiscovery: (bookingId: number) =>
+    request<{ status: string; meet_url: string | null }>(`/api/consultant/bookings/${bookingId}/reinvite`, {
+      method: "POST",
+    }),
   adminSetHours: (purchaseId: number, hoursPurchased: number) =>
     request<{ hours_purchased: number; hours_booked: number; hours_remaining: number }>(
       `/api/consultant/purchases/${purchaseId}`,
@@ -360,6 +364,7 @@ export type TimelineItem = {
   end: string;
   meet_url: string | null;
   message: string | null;
+  can_reinvite: boolean;
   report: { id: number; status: ReportStatus; synthese: Synthese | null; erased: boolean } | null;
 };
 

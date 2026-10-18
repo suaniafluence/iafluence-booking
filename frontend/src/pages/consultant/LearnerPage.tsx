@@ -137,7 +137,7 @@ function Detail({ data, onChange }: { data: LearnerDetail; onChange: () => void 
       <ResearchPanel learnerId={c.id} research={data.research} onChange={onChange} />
       <Acquisition id={c.id} source={c.acquisition_source} detail={c.acquisition_detail} />
       <Notes id={c.id} notes={c.notes} />
-      <Timeline items={data.timeline} />
+      <Timeline items={data.timeline} onChange={onChange} />
       <Purchases purchases={data.purchases} />
     </div>
   );
@@ -220,7 +220,7 @@ function Notes({ id, notes }: { id: number; notes: string | null }) {
   );
 }
 
-function Timeline({ items }: { items: LearnerDetail["timeline"] }) {
+function Timeline({ items, onChange }: { items: LearnerDetail["timeline"]; onChange: () => void }) {
   return (
     <section>
       <SectionTitle icon="history">Historique</SectionTitle>
@@ -228,35 +228,87 @@ function Timeline({ items }: { items: LearnerDetail["timeline"] }) {
         <p className="mt-2 text-sm text-slate-500">Aucun rendez-vous.</p>
       ) : (
         <ul className="mt-3 divide-y divide-slate-200 rounded border border-slate-200 bg-white text-sm">
-          {items.map((b) => (
-            <li key={b.booking_id} className="px-5 py-3">
-              <div className="flex flex-wrap justify-between gap-2">
-                <span className="font-bold text-slate-900">
-                  {KIND_LABELS[b.kind]}
-                  {b.kind !== "discovery" && ` · ${b.label}`}
-                  {b.status === "cancelled" && " (annulé)"}
-                </span>
-                <span className="text-slate-500">
-                  {longDate(b.start)} · {hm(b.start)}
-                </span>
-              </div>
-              {b.message && <p className="mt-1 text-slate-600">Sujet indiqué : {b.message}</p>}
-              {b.report?.synthese && (
-                <details className="mt-1">
-                  <summary className="cursor-pointer text-brand-600">Compte rendu</summary>
-                  <ul className="mt-1 list-disc pl-5 text-slate-700">
-                    {[...b.report.synthese.points_abordes, ...b.report.synthese.decisions].map((p) => (
-                      <li key={p}>{p}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {b.report?.erased && <p className="mt-1 text-xs text-slate-500">Compte rendu effacé (durée de conservation).</p>}
-            </li>
+          {items.map((item) => (
+            <TimelineRow key={item.booking_id} item={item} onChange={onChange} />
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+function TimelineRow({ item, onChange }: { item: LearnerDetail["timeline"][number]; onChange: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reinvite = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.reinviteDiscovery(item.booking_id);
+      setConfirming(false);
+      setSent(true);
+      onChange();
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className="px-5 py-3">
+      <div className="flex flex-wrap justify-between gap-2">
+        <span className="font-bold text-slate-900">
+          {KIND_LABELS[item.kind]}
+          {item.kind !== "discovery" && ` · ${item.label}`}
+          {item.status === "cancelled" && " (annulé)"}
+        </span>
+        <span className="text-slate-500">
+          {longDate(item.start)} · {hm(item.start)}
+        </span>
+      </div>
+      {item.message && <p className="mt-1 text-slate-600">Sujet indiqué : {item.message}</p>}
+      {item.report?.synthese && (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-brand-600">Compte rendu</summary>
+          <ul className="mt-1 list-disc pl-5 text-slate-700">
+            {[...item.report.synthese.points_abordes, ...item.report.synthese.decisions].map((point) => (
+              <li key={point}>{point}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {item.report?.erased && <p className="mt-1 text-xs text-slate-500">Compte rendu effacé (durée de conservation).</p>}
+      {item.can_reinvite && !confirming && !sent && (
+        <Button variant="secondary" className="mt-3 min-h-9 px-3 text-sm" onClick={() => setConfirming(true)}>
+          Recréer l’invitation calendrier
+        </Button>
+      )}
+      {confirming && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-slate-600">Le même créneau sera recréé et l’invitation envoyée au prospect.</span>
+          <Button className="min-h-9 px-3 text-sm" onClick={reinvite} disabled={busy}>
+            {busy ? "Envoi…" : "Confirmer l’envoi"}
+          </Button>
+          <Button variant="secondary" className="min-h-9 px-3 text-sm" onClick={() => setConfirming(false)} disabled={busy}>
+            Annuler
+          </Button>
+        </div>
+      )}
+      {sent && (
+        <div className="mt-3">
+          <Alert tone="info">Invitation calendrier recréée et envoyée.</Alert>
+        </div>
+      )}
+      {error && (
+        <div className="mt-3">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+    </li>
   );
 }
 

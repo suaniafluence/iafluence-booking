@@ -19,7 +19,14 @@ from app.auth import default_consultant_id
 from app.models import Booking, Customer, Settings
 from app.services import settings_service
 from app.services.availability import Interval, SlotRules, resolve_slot
-from app.services.booking_service import BOOKING_LOCK_KEY, BookingError, SlotInvalid, list_availability, reserve
+from app.services.booking_service import (
+    BOOKING_LOCK_KEY,
+    BookingError,
+    BookingNotFound,
+    SlotInvalid,
+    list_availability,
+    reserve,
+)
 from app.services.calendar_service import CalendarGateway
 
 log = logging.getLogger(__name__)
@@ -42,6 +49,14 @@ class DiscoveryAlreadyBooked(BookingError):
         409,
         "discovery_already_booked",
         "Un appel découverte est déjà prévu pour cette adresse email : retrouvez-le dans l’email de confirmation.",
+    )
+
+
+class DiscoveryNotReinvitable(BookingError):
+    status_code, code, message = (
+        409,
+        "discovery_not_reinvitable",
+        "Seul un appel découverte annulé et à venir peut être réinvité.",
     )
 
 
@@ -75,6 +90,15 @@ def _customer(db: Session, name: str, email: str) -> Customer:
     return db.scalar(select(Customer).where(Customer.email == email))
 
 
+def _event_description(locale: str, customer_timezone: str | None, message: str | None, settings: Settings) -> str:
+    description = i18n.text(locale, "discovery_event_description", minutes=settings.discovery_duration_min)
+    if message:
+        description += "\n\n" + i18n.text(locale, "discovery_event_message", message=message)
+    if customer_timezone and customer_timezone != settings.timezone:
+        description += "\n\n" + i18n.text(locale, "event_timezone", tz=customer_timezone)
+    return description
+
+
 def book(
     db: Session,
     calendar: CalendarGateway,
@@ -106,11 +130,6 @@ def book(
 
     locale = i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE
     customer_timezone = i18n.valid_timezone(customer_timezone)
-    description = i18n.text(locale, "discovery_event_description", minutes=settings.discovery_duration_min)
-    if message:
-        description += "\n\n" + i18n.text(locale, "discovery_event_message", message=message)
-    if customer_timezone and customer_timezone != settings.timezone:
-        description += "\n\n" + i18n.text(locale, "event_timezone", tz=customer_timezone)
     booking = reserve(
         db,
         calendar,
@@ -125,8 +144,47 @@ def book(
             message=message or None,
         ),
         summary=i18n.text(locale, "discovery_event_summary", name=name),
-        description=description,
+        description=_event_description(locale, customer_timezone, message, settings),
         attendee=customer,
     )
     log.info("discovery call %s booked", booking.id)
     return booking
+
+
+def reinvite(db: Session, calendar: CalendarGateway, booking_id: int, now: datetime) -> Booking:
+    """Restore a cancelled future discovery call and let Google send a fresh calendar invitation."""
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": BOOKING_LOCK_KEY})
+    booking = db.scalar(select(Booking).where(Booking.id == booking_id).with_for_update())
+    if booking is None:
+        db.rollback()
+        raise BookingNotFound()
+    if booking.kind != "discovery" or booking.status != "cancelled" or booking.start_datetime <= now:
+        db.rollback()
+        raise DiscoveryNotReinvitable()
+    upcoming = db.scalar(
+        select(Booking.id).where(
+            Booking.customer_id == booking.customer_id,
+            Booking.kind == "discovery",
+            Booking.status == "confirmed",
+        )
+    )
+    if upcoming is not None:
+        db.rollback()
+        raise DiscoveryAlreadyBooked()
+
+    settings = settings_service.get_settings(db)
+    locale = i18n.normalize_locale(booking.locale) or i18n.DEFAULT_LOCALE
+    slot = Interval(booking.start_datetime, booking.end_datetime)
+    restored = reserve(
+        db,
+        calendar,
+        settings,
+        slot_rules(db, settings),
+        slot,
+        booking,
+        summary=i18n.text(locale, "discovery_event_summary", name=booking.customer.name),
+        description=_event_description(locale, booking.customer_timezone, booking.message, settings),
+        attendee=booking.customer,
+    )
+    log.info("discovery call %s reinvited", restored.id)
+    return restored

@@ -345,6 +345,7 @@ export const learnerDetail = (over: Partial<LearnerDetail> = {}): LearnerDetail 
       end: "2026-08-25T10:30:00+02:00",
       meet_url: null,
       message: "Automatiser les devis",
+      can_reinvite: false,
       report: {
         id: 2,
         status: "drafted",

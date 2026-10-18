@@ -73,6 +73,11 @@ describe("api", () => {
       "/api/consultant/bookings/21/cancel",
       expect.objectContaining({ method: "POST", body: '{"notify":false}' }),
     );
+    await api.reinviteDiscovery(22);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/consultant/bookings/22/reinvite",
+      expect.objectContaining({ method: "POST" }),
+    );
     await api.adminSetHours(3, 2);
     expect(fetch).toHaveBeenLastCalledWith(
       "/api/consultant/purchases/3",

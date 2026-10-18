@@ -38,6 +38,7 @@ from app.services import (
     booking_service,
     calendar_print,
     company,
+    discovery,
     learners,
     manual_purchase,
     meetings,
@@ -218,6 +219,22 @@ def cancel_booking(
         background.add_task(notifications.send_booking_cancelled, mailer, booking.id)
     hours = booking_service.hours_summary(booking.purchase) if booking.purchase else {}
     return {"status": "cancelled", **hours}
+
+
+@router.post("/bookings/{booking_id}/reinvite")
+def reinvite_discovery(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(require_consultant),
+    calendar=Depends(get_calendar),
+    now: datetime = Depends(get_now),
+):
+    """Restore a cancelled future discovery call and send a fresh Google Calendar invitation."""
+    booking = db.get(Booking, booking_id)
+    if booking is None or learners.get_customer(db, staff, booking.customer_id) is None:
+        raise booking_service.BookingNotFound()
+    booking = discovery.reinvite(db, calendar, booking_id, now)
+    return {"status": "confirmed", "meet_url": booking.meet_url}
 
 
 @router.patch("/purchases/{purchase_id}", dependencies=[Depends(require_consultant)])

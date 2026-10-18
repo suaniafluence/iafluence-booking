@@ -87,6 +87,43 @@ describe("LearnerPage", () => {
     expect(screen.getByLabelText(/Jamais montrées au client/)).toHaveValue("");
   });
 
+  it("recreates a cancelled future discovery invitation after confirmation", async () => {
+    const base = learnerDetail();
+    vi.mocked(api.learner).mockResolvedValue(
+      learnerDetail({
+        timeline: [{ ...base.timeline[0], status: "cancelled", can_reinvite: true }],
+      }),
+    );
+    vi.spyOn(api, "reinviteDiscovery").mockResolvedValue({ status: "confirmed", meet_url: "https://meet.google.com/new" });
+    const user = userEvent.setup();
+
+    show();
+    await user.click(await screen.findByRole("button", { name: "Recréer l’invitation calendrier" }));
+    expect(api.reinviteDiscovery).not.toHaveBeenCalled();
+    expect(screen.getByText("Le même créneau sera recréé et l’invitation envoyée au prospect.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Confirmer l’envoi" }));
+    expect(api.reinviteDiscovery).toHaveBeenCalledWith(9);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invitation calendrier recréée et envoyée.");
+    expect(api.learner).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows why a discovery invitation cannot be recreated", async () => {
+    const base = learnerDetail();
+    vi.mocked(api.learner).mockResolvedValue(
+      learnerDetail({
+        timeline: [{ ...base.timeline[0], status: "cancelled", can_reinvite: true }],
+      }),
+    );
+    vi.spyOn(api, "reinviteDiscovery").mockRejectedValue(new ApiError(409, "Ce créneau vient d’être réservé."));
+    const user = userEvent.setup();
+
+    show();
+    await user.click(await screen.findByRole("button", { name: "Recréer l’invitation calendrier" }));
+    await user.click(screen.getByRole("button", { name: "Confirmer l’envoi" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ce créneau vient d’être réservé.");
+  });
+
   it("idle learner with an NDA signed, no history", async () => {
     const base = learnerDetail();
     vi.mocked(api.learner).mockResolvedValue(

@@ -197,6 +197,64 @@ def test_detail(cockpit, jean):
     assert d["company"] is None and d["research"]["status"] is None and d["plan"] is None
 
 
+def test_reinvite_cancelled_future_discovery(cockpit, fakes):
+    customer_id = add_customer("Paul Prospect", "paul@example.com")
+    booking_id = add_booking(
+        customer_id,
+        paris(2026, 10, 20, 17),
+        kind="discovery",
+        status="cancelled",
+        minutes=30,
+        message="Automatiser les devis",
+    )
+    with SessionLocal() as db:
+        booking = db.get(Booking, booking_id)
+        booking.locale = "fr"
+        booking.customer_timezone = "Europe/Paris"
+        db.commit()
+
+    [item] = cockpit.get(f"/api/consultant/learners/{customer_id}").json()["timeline"]
+    assert item["can_reinvite"] is True
+
+    response = cockpit.post(f"/api/consultant/bookings/{booking_id}/reinvite")
+    assert response.status_code == 200
+    assert response.json() == {"status": "confirmed", "meet_url": "https://meet.google.com/abc-defg-hij"}
+    [event] = fakes["calendar"].events
+    assert event["attendee_email"] == "paul@example.com"
+    assert event["summary"] == "Appel découverte - Paul Prospect"
+    assert "Automatiser les devis" in event["description"]
+    with SessionLocal() as db:
+        booking = db.get(Booking, booking_id)
+        assert booking.status == "confirmed"
+        assert booking.google_event_id == event["id"]
+
+    [item] = cockpit.get(f"/api/consultant/learners/{customer_id}").json()["timeline"]
+    assert item["can_reinvite"] is False
+
+
+def test_reinvite_discovery_rejects_unavailable_cases(cockpit, fakes):
+    customer_id = add_customer("Paul Prospect", "paul@example.com")
+    past = add_booking(
+        customer_id, paris(2026, 10, 4, 17), kind="discovery", status="cancelled", minutes=30
+    )
+    future = add_booking(
+        customer_id, paris(2026, 10, 20, 17), kind="discovery", status="cancelled", minutes=30
+    )
+
+    response = cockpit.post(f"/api/consultant/bookings/{past}/reinvite")
+    assert response.status_code == 409
+    assert response.json()["code"] == "discovery_not_reinvitable"
+
+    fakes["calendar"].busy["cal-principal"] = [
+        (paris(2026, 10, 20, 17), paris(2026, 10, 20, 17, 30))
+    ]
+    response = cockpit.post(f"/api/consultant/bookings/{future}/reinvite")
+    assert response.status_code == 409
+    assert response.json()["code"] == "slot_taken"
+    with SessionLocal() as db:
+        assert db.get(Booking, future).status == "cancelled"
+
+
 def test_notes_and_company_name(cockpit, jean):
     r = cockpit.patch(f"/api/consultant/learners/{jean}", json={"notes": "  Très pressé  ", "company_name": "Dupont SAS"})
     assert r.json() == {
