@@ -14,8 +14,9 @@
 		X-Frame-Options "DENY"
 		# Booking tokens live in the URL: never leak them through the Referer header.
 		Referrer-Policy "no-referrer"
-		# No third-party script or framing: a booking URL is a bearer credential.
-		Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; script-src 'self'"
+		# No framing, and no third-party script but the IAfluence ticket widget (a booking URL is a bearer credential:
+		# the app never loads the widget on a booking link).
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://tickets.iafluence.fr; font-src 'self'; script-src 'self' https://tickets.iafluence.fr"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 		-Server
 	}

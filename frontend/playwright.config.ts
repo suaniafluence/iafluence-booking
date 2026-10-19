@@ -37,7 +37,8 @@ export default defineConfig({
       // The production bundle, served with the same /api proxy as the dev server (preview.proxy = server.proxy).
       command: `npx vite build --logLevel warn && npx vite preview --port ${WEB_PORT} --strictPort --host 127.0.0.1`,
       url: `http://127.0.0.1:${WEB_PORT}`,
-      env: { API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}` },
+      // No ticket widget: its floating button would cover the controls the tests click.
+      env: { API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}`, VITE_TICKET_WIDGET_URL: "" },
       timeout: 120_000,
       reuseExistingServer: false,
     },
