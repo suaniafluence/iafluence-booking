@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 
 // The IAfluence floating "report a problem" widget (ticket-widget project). Empty VITE_TICKET_WIDGET_URL = no widget.
-const WIDGET_URL = import.meta.env.VITE_TICKET_WIDGET_URL ?? "https://tickets.iafluence.fr/static/ticket.js";
+const WIDGET_URL = import.meta.env.VITE_TICKET_WIDGET_URL ?? "https://tickets.widget.iafluence.fr/static/ticket.js";
 const SCRIPT_ID = "iafluence-ticket-script";
 const HOST_ID = "iafluence-ticket-root";
 

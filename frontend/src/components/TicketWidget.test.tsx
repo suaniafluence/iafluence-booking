@@ -29,7 +29,7 @@ describe("isTokenPage", () => {
 describe("TicketWidget", () => {
   it("loads the widget once, as the booking app", () => {
     renderAt("/fr/decouverte");
-    expect(script()?.src).toBe("https://tickets.iafluence.fr/static/ticket.js");
+    expect(script()?.src).toBe("https://tickets.widget.iafluence.fr/static/ticket.js");
     expect(script()?.dataset.app).toBe("booking");
     renderAt("/admin");
     expect(document.querySelectorAll("#iafluence-ticket-script")).toHaveLength(1);
