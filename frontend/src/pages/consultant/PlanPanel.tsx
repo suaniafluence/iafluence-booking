@@ -174,6 +174,37 @@ export function PlanPanel({ learnerId, plan, onChange }: { learnerId: number; pl
                 </Button>
               </div>
             </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-50 px-3 py-2 text-sm">
+              <span className="text-slate-600">
+                {plan.email_drafted_at
+                  ? "Email du plan préparé dans vos brouillons Gmail."
+                  : plan.validated_at
+                    ? "Plan validé : vous pouvez préparer l’email pour l’apprenant."
+                    : "Validez le plan pour préparer l’email de l’apprenant."}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  className="min-h-9 px-3 text-sm"
+                  disabled={busy || sending || !plan.validated_at}
+                  onClick={() => act(() => api.draftPlanEmail(learnerId))}
+                >
+                  {plan.email_drafted_at ? "Recréer le brouillon" : "Préparer l’email (brouillon)"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="min-h-9 px-3 text-sm"
+                  disabled={busy || sending}
+                  onClick={() => {
+                    if (window.confirm("Archiver ce plan ? Vous pourrez ensuite en générer un nouveau pour poursuivre la formation.")) {
+                      void act(() => api.archivePlan(learnerId));
+                    }
+                  }}
+                >
+                  Archiver le plan
+                </Button>
+              </div>
+            </div>
             <PlanView content={plan.content} />
           </>
         )}

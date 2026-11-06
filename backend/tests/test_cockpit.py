@@ -505,6 +505,33 @@ def test_generate_then_chat(cockpit, fakes, codex_on, jean):
     assert plan["version"] == 3 and plan["validated_at"] is None
 
 
+def test_validated_plan_becomes_a_gmail_draft_then_is_archived_for_the_next_one(cockpit, fakes, codex_on, jean):
+    fakes["codex"].answers = [plan_answer(3)]
+    cockpit.post(f"/api/consultant/learners/{jean}/plan")
+    url = f"/api/consultant/learners/{jean}/plan"
+    # Only a validated plan is turned into an email.
+    r = cockpit.post(f"{url}/email-draft")
+    assert r.status_code == 409 and "Validez d'abord" in r.json()["detail"] and fakes["mailer"].drafts == []
+    cockpit.patch(url, json={"validated": True})
+    assert cockpit.post(f"{url}/email-draft").status_code == 200
+    [draft] = fakes["mailer"].drafts
+    assert draft["to"] == "jean@dupont-conseil.fr" and draft["subject"].startswith("Votre plan d'accompagnement")
+    assert draft["body"].startswith("Bonjour Jean,") and "Séance 1" in draft["body"]
+    assert "hypothèses" not in draft["body"].lower() and fakes["mailer"].sent == []
+    assert plan_of(cockpit, jean)["email_drafted_at"] is not None
+
+    # Archiving frees the customer for a next plan, whose dossier remembers the archived one.
+    assert cockpit.post(f"{url}/archive").status_code == 200
+    assert plan_of(cockpit, jean) is None
+    fakes["codex"].answers = [plan_answer(3, objectif="Étape suivante")]
+    cockpit.post(url)
+    dossier = json.loads(fakes["codex"].turns[-1]["prompt"].split("<<<DOSSIER\n")[1].split("\nDOSSIER>>>")[0])
+    assert dossier["plans_precedents_archives"][0]["objectif"] == "Diviser par trois le temps des devis"
+    assert plan_of(cockpit, jean)["content"]["objectif"] == "Étape suivante"
+    with SessionLocal() as db:
+        assert len(db.scalars(select(ActionPlan).where(ActionPlan.customer_id == jean)).all()) == 2
+
+
 def test_the_plan_must_fit_the_sessions_left(cockpit, fakes, codex_on, jean):
     fakes["codex"].answers = [plan_answer(5), plan_answer(3)]
     cockpit.post(f"/api/consultant/learners/{jean}/plan")
