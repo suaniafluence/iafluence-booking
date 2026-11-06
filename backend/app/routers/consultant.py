@@ -623,7 +623,7 @@ def generate_plan(
     """« Générer le plan », or « Régénérer » (a full rewrite from the updated dossier, the chat is kept)."""
     _codex_ready()
     customer = _learner(db, staff, customer_id)
-    exists = db.scalar(select(ActionPlan.id).where(ActionPlan.customer_id == customer.id)) is not None
+    exists = action_plans.current(db, customer.id) is not None
     plan = _plan_call(
         lambda: action_plans.request(db, customer, staff.id, now, action_plans.REWRITE_REQUEST if exists else None)
     )
@@ -659,3 +659,28 @@ def validate_plan(
 ):
     plan = _plan_call(lambda: action_plans.validate(db, _learner(db, staff, customer_id), body.validated, now))
     return {"validated_at": plan.validated_at.isoformat() if plan.validated_at else None}
+
+
+@router.post("/learners/{customer_id}/plan/email-draft")
+def draft_plan_email(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(require_consultant),
+    mailer=Depends(get_mailer),
+    now: datetime = Depends(get_now),
+):
+    """« Préparer l'email » : the validated plan, reworded, left in the Gmail drafts for the learner."""
+    plan = _plan_call(lambda: action_plans.draft_email(db, _learner(db, staff, customer_id), mailer, now))
+    return {"email_drafted_at": plan.email_drafted_at.isoformat()}
+
+
+@router.post("/learners/{customer_id}/plan/archive")
+def archive_plan(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(require_consultant),
+    now: datetime = Depends(get_now),
+):
+    """« Archiver » : the plan is closed, a new one can be generated to carry on the training."""
+    _plan_call(lambda: action_plans.archive(db, _learner(db, staff, customer_id), now))
+    return {"status": "archived"}

@@ -8,6 +8,8 @@
   rewrite. Codex returns its answer and the whole plan, validated (app.services.plan_content) before replacing it.
 - A turn takes minutes: the plan is claimed (`claimed_until`) instead of holding a row lock, like the session
   reports. The chat runs it right away in the background; the job loop catches anything left (crash, purchase).
+- A validated plan is reworded as a Gmail draft for the customer (`draft_email`); `archive` closes the plan so a
+  next one can be written (the archived ones feed its dossier).
 - The dossier holds no transcript: only the summaries, the company profile and the consultant's notes.
 """
 
@@ -25,6 +27,7 @@ from app.db import SessionLocal
 from app.models import ActionPlan, ActionPlanMessage, Booking, Customer, CustomerProfile, Purchase, SessionReport
 from app.services import learners, plan_content, report_content
 from app.services.codex import CodexGateway, CodexNotConnected, CodexTurnFailed, CodexUnavailable
+from app.services.email_service import send_safely
 from app.services.settings_service import get_settings
 
 log = logging.getLogger(__name__)
@@ -61,13 +64,25 @@ def plan_dict(plan: ActionPlan | None, tz: ZoneInfo, now: datetime) -> dict | No
         "error": plan.error,
         "version": plan.version,
         "validated_at": iso(plan.validated_at),
+        "email_drafted_at": iso(plan.email_drafted_at),
         "updated_at": iso(plan.updated_at),
         "messages": [{"role": m.role, "content": m.content, "created_at": iso(m.created_at)} for m in plan.messages],
     }
 
 
+def current(db: Session, customer_id: int) -> ActionPlan | None:
+    """The customer's active plan: archived ones are history."""
+    return db.scalar(
+        select(ActionPlan).where(ActionPlan.customer_id == customer_id, ActionPlan.archived_at.is_(None))
+    )
+
+
 def _locked_plan(db: Session, customer_id: int) -> ActionPlan | None:
-    return db.scalar(select(ActionPlan).where(ActionPlan.customer_id == customer_id).with_for_update())
+    return db.scalar(
+        select(ActionPlan)
+        .where(ActionPlan.customer_id == customer_id, ActionPlan.archived_at.is_(None))
+        .with_for_update()
+    )
 
 
 def request(db: Session, customer: Customer, consultant_id: int | None, now: datetime, message: str | None = None) -> ActionPlan:
@@ -107,6 +122,80 @@ def validate(db: Session, customer: Customer, validated: bool, now: datetime) ->
     return plan
 
 
+# --- the validated plan as an email to the customer, left in the Gmail drafts ----------------------------------------
+
+
+def _bullets(items: list[str]) -> str:
+    return "\n".join(f"- {i}" for i in items)
+
+
+def compose_email(customer: Customer, content: dict, consultant: str) -> tuple[str, str]:
+    """(subject, body): the plan reworded for the customer. What is for the consultant alone (hypotheses to check,
+    questions to ask, risks, the effort of each priority) stays out."""
+    first = customer.name.split()[0] if customer.name else ""
+    parts = [
+        f"Bonjour {first},".strip(),
+        "Suite à nos échanges, voici le plan d'accompagnement que je vous propose.",
+        content["resume"],
+        f"Notre objectif :\n{content['objectif']}",
+        "Ce que nous allons travailler en priorité :\n"
+        + "\n".join(f"{n}. {p['titre']} — {p['pourquoi']} (gain attendu : {p['gain_attendu']})" for n, p in enumerate(content["priorites"], 1)),
+    ]
+    sessions = []
+    for s in content["seances"]:
+        lines = [f"Séance {s['numero']} — {s['titre']} ({s['duree_min']} min)", s["objectif"], f"Vous repartirez avec : {s['livrable']}"]
+        if s["preparation_client"]:
+            lines.append("À préparer de votre côté :\n" + _bullets(s["preparation_client"]))
+        sessions.append("\n".join(lines))
+    parts.append("Le déroulé des séances :")
+    parts.extend(sessions)
+    if content["entre_les_seances"]:
+        parts.append("Entre les séances :\n" + _bullets(content["entre_les_seances"]))
+    if content["indicateurs"]:
+        parts.append("Comment nous mesurerons les progrès :\n" + _bullets(content["indicateurs"]))
+    if content["outils"]:
+        parts.append("Les outils envisagés :\n" + _bullets([f"{o['nom']} : {o['usage']} ({o['cout']})" for o in content["outils"]]))
+    parts.append("N'hésitez pas à me dire si vous souhaitez ajuster quelque chose avant que nous démarrions.")
+    parts.append(f"Cordialement,\n{consultant}\nIAfluence")
+    return f"Votre plan d'accompagnement IAfluence : {content['objectif']}"[:150], "\n\n".join(parts) + "\n"
+
+
+def draft_email(db: Session, customer: Customer, mailer, now: datetime) -> ActionPlan:
+    """« Préparer l'email » : the validated plan as a Gmail draft (never sent: the consultant reads and sends it)."""
+    plan = _locked_plan(db, customer.id)
+    if plan is None or plan.content is None:
+        db.rollback()
+        raise PlanError("Pas encore de plan.", 404)
+    if plan.validated_at is None:
+        db.rollback()
+        raise PlanError("Validez d'abord le plan : l'email n'est préparé que pour un plan validé.")
+    if busy(plan):
+        db.rollback()
+        raise PlanError("Le plan est en cours de rédaction : attendez la réponse.")
+    subject, body = compose_email(customer, plan.content, get_settings(db).consultant_name)
+    plan_id, to = plan.id, customer.email
+    db.rollback()  # Gmail may be slow: no row lock meanwhile
+    if not send_safely(mailer, to, subject, body, as_draft=True):
+        raise PlanError("Le brouillon n'a pas pu être créé dans Gmail (voir les logs de l'API).", 502)
+    plan = db.scalar(select(ActionPlan).where(ActionPlan.id == plan_id).with_for_update())
+    plan.email_drafted_at = now
+    db.commit()
+    return plan
+
+
+def archive(db: Session, customer: Customer, now: datetime) -> None:
+    """« Archiver le plan » : closes it so a next plan can be written to carry on the training."""
+    plan = _locked_plan(db, customer.id)
+    if plan is None:
+        db.rollback()
+        raise PlanError("Pas de plan à archiver.", 404)
+    if busy(plan):
+        db.rollback()
+        raise PlanError("Le plan est en cours de rédaction : attendez la réponse.")
+    plan.archived_at = now
+    db.commit()
+
+
 def on_purchase(db: Session, purchase: Purchase, now: datetime) -> bool:
     """Hours bought after a discovery call: the plan is written by itself (once per customer)."""
     had_call = db.scalar(
@@ -116,9 +205,8 @@ def on_purchase(db: Session, purchase: Purchase, now: datetime) -> bool:
     )
     if had_call is None:
         return False
-    plan = _locked_plan(db, purchase.customer_id)
-    if plan is not None:
-        db.rollback()
+    # Once per customer, archived plans included: the next plan of a customer is asked for by the consultant.
+    if db.scalar(select(ActionPlan.id).where(ActionPlan.customer_id == purchase.customer_id).limit(1)) is not None:
         return False
     customer = db.get(Customer, purchase.customer_id)
     db.add(
@@ -201,6 +289,22 @@ def dossier(db: Session, customer: Customer, plan: ActionPlan, now: datetime) ->
             for b in sessions
         ],
     }
+    archived = db.scalars(
+        select(ActionPlan)
+        .where(ActionPlan.customer_id == customer.id, ActionPlan.archived_at.is_not(None), ActionPlan.content.is_not(None))
+        .order_by(ActionPlan.archived_at)
+    )
+    previous = [
+        {
+            "archive_le": p.archived_at.astimezone(ZoneInfo(tz)).strftime("%d/%m/%Y"),
+            "objectif": p.content["objectif"],
+            "resume": p.content["resume"],
+            "seances": [s["titre"] for s in p.content["seances"]],
+        }
+        for p in archived
+    ]
+    if previous:
+        data["plans_precedents_archives"] = previous
     message = None
     if plan.content is not None:
         data["plan_actuel"] = plan.content
@@ -283,6 +387,7 @@ def run(codex: CodexGateway, plan_id: int, now: datetime) -> None:
         plan.status, plan.error = "ready", None
         plan.version += 1
         plan.validated_at = None
+        plan.email_drafted_at = None
         plan.messages.append(ActionPlanMessage(role="assistant", content=output.reponse, created_at=now))
 
     _finish(plan_id, ready)

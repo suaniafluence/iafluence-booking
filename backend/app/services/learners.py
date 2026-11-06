@@ -147,7 +147,7 @@ def rows(db: Session, staff: Staff, now: datetime, include_hidden: bool = False)
     settings = get_settings(db)
     tz = ZoneInfo(settings.timezone)
     customers, bookings = _load(db, scoped(select(Customer), staff))
-    plans = {p.customer_id: p for p in db.scalars(select(ActionPlan).where(ActionPlan.customer_id.in_([c.id for c in customers])))}
+    plans = {p.customer_id: p for p in db.scalars(select(ActionPlan).where(ActionPlan.customer_id.in_([c.id for c in customers]), ActionPlan.archived_at.is_(None)))}
     out, hidden = [], 0
     for customer in customers:
         act = activity(customer, bookings[customer.id], now)
@@ -249,9 +249,10 @@ def detail(db: Session, customer: Customer, now: datetime) -> dict:
     _, bookings = _load(db, select(Customer).where(Customer.id == customer.id))
     act = activity(customer, bookings[customer.id], now)
     profile = db.get(CustomerProfile, customer.id)
-    plan = db.scalar(select(ActionPlan).where(ActionPlan.customer_id == customer.id))
     purchases = sorted(customer.purchases, key=lambda p: p.created_at, reverse=True)
     from app.services import action_plans  # circular: action_plans builds its dossier from this module
+
+    plan = action_plans.current(db, customer.id)
 
     return {
         "customer": {

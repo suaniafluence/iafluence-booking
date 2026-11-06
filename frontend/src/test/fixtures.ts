@@ -286,6 +286,7 @@ export const plan = (over: Partial<ActionPlan> = {}): ActionPlan => ({
   error: null,
   version: 1,
   validated_at: null,
+  email_drafted_at: null,
   updated_at: "2026-10-05T08:00:00+02:00",
   messages: [{ role: "assistant", content: "Choix : les devis d'abord.", created_at: "2026-10-05T08:00:00+02:00" }],
   ...over,

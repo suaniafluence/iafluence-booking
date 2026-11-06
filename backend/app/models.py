@@ -388,10 +388,14 @@ class ActionPlan(Base):
     __tablename__ = "action_plans"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), unique=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"))
     consultant_id: Mapped[int | None] = mapped_column(ForeignKey("staff_users.id", ondelete="SET NULL"))
     purchase_id: Mapped[int | None] = mapped_column(ForeignKey("purchases.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(16))
+    # Set once the validated plan is left as a Gmail draft for the customer.
+    email_drafted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # An archived plan is history: the customer's next plan (continuing the training) is a new row.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Held by the process running the Codex turn (minutes: no row lock meanwhile).
     claimed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     content: Mapped[dict | None] = mapped_column(JSONB)
@@ -409,6 +413,7 @@ class ActionPlan(Base):
     __table_args__ = (
         CheckConstraint("status IN ('pending', 'generating', 'ready', 'failed')", name="action_plan_status"),
         Index("ix_action_plans_status", "status"),
+        Index("uq_action_plans_active", "customer_id", unique=True, postgresql_where=text("archived_at IS NULL")),
     )
 
 

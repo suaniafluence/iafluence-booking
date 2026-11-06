@@ -225,6 +225,9 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ validated }),
     }),
+  draftPlanEmail: (id: number) =>
+    request<{ email_drafted_at: string }>(`/api/consultant/learners/${id}/plan/email-draft`, { method: "POST" }),
+  archivePlan: (id: number) => request<{ status: string }>(`/api/consultant/learners/${id}/plan/archive`, { method: "POST" }),
 };
 
 /** Where the browser goes to sign in with Google for an area (the API redirects to Google, then back). */
@@ -353,6 +356,7 @@ export type ActionPlan = {
   error: string | null;
   version: number;
   validated_at: string | null;
+  email_drafted_at: string | null;
   updated_at: string | null;
   messages: { role: "consultant" | "assistant"; content: string; created_at: string | null }[];
 };
