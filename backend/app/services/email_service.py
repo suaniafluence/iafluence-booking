@@ -157,6 +157,9 @@ def build_message(
     html_part = msg.get_payload()[1]
     for cid, png in (images or {}).items():
         html_part.add_related(png, "image", "png", cid=f"<{cid}>", filename=f"{cid}.png", disposition="inline")
+        # Gmail's own inline images carry X-Attachment-Id = their Content-ID. Without it, a draft shows the image in the
+        # composer but the image can be dropped when the draft is sent from Gmail.
+        html_part.get_payload()[-1]["X-Attachment-Id"] = cid
     for filename, data in attachments or ():
         msg.add_attachment(data, "application", "pdf", filename=filename)
     return msg

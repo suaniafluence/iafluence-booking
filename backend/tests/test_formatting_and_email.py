@@ -304,6 +304,7 @@ def test_html_email_with_inline_image(monkeypatch):
     assert html.get_content() == '<img src="cid:compte-rendu">\n'
     assert (png.get_content_type(), png["Content-ID"], png.get_content()) == ("image/png", "<compte-rendu>", b"PNG")
     assert png.get_content_disposition() == "inline" and png.get_filename() == "compte-rendu.png"
+    assert png["X-Attachment-Id"] == "compte-rendu"  # as Gmail's own inline images: kept when the draft is sent
 
 
 def test_html_email_with_inline_image_is_sent(monkeypatch):
