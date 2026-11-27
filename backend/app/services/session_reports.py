@@ -649,11 +649,12 @@ def draft_without_summary(db: Session, report_id: int, now: datetime) -> Email |
 
 
 def retry_email(db: Session, report_id: int, now: datetime) -> Email | None:
-    """« Recréer le brouillon » after a Gmail failure: the same email, always as a draft — a failed send may still
-    have reached the client (timeout after Gmail accepted it), so it is never sent twice automatically."""
+    """« Recréer le brouillon » : the same email again, always as a draft — after a Gmail failure, or when the draft
+    was lost or went to the wrong place. A failed send may still have reached the client (timeout after Gmail
+    accepted it), so it is never sent twice automatically."""
     report = _locked(db, report_id)
-    if report.status != "drafted" or report.delivery != "failed":
-        raise ReportActionError("Cet email n'a pas échoué : rien à recréer.")
+    if report.status != "drafted":
+        raise ReportActionError("L'email de cette séance n'a pas encore été préparé : rien à recréer.")
     report.error = None
     email = compose(db, report, now, with_summary=bool(report.with_summary), force_draft=True)
     db.commit()

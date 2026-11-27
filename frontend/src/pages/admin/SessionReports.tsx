@@ -190,7 +190,35 @@ export function SessionReports({ reports, onChange }: { reports: AdminOverview["
                       {longDate(s.start)} · {hm(s.start)} · {s.product}
                     </div>
                   </div>
-                  <span className={`rounded-sm px-2.5 py-0.5 text-xs font-semibold ${TONES[tone]}`}>{label}</span>
+                  <span className="flex items-center gap-2">
+                    <span className={`rounded-sm px-2.5 py-0.5 text-xs font-semibold ${TONES[tone]}`}>{label}</span>
+                    {r !== null && r.status === "drafted" && !gmailFailed && (
+                      <button
+                        type="button"
+                        disabled={busy === r.id}
+                        title="Recréer le brouillon dans Gmail"
+                        aria-label={`Recréer le brouillon de ${s.customer}`}
+                        className="rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-brand-600 disabled:text-slate-300"
+                        onClick={() =>
+                          act(s, () => api.adminRetryReportEmail(r.id), `Brouillon de ${s.customer} recréé dans Gmail.`)
+                        }
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className={`h-4 w-4 ${busy === r.id ? "animate-spin" : ""}`}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 12a9 9 0 1 1-3-6.7" />
+                          <path d="M21 3v6h-6" />
+                        </svg>
+                      </button>
+                    )}
+                  </span>
                 </div>
                 {who && <p className="mt-1 text-xs text-slate-500">{who}</p>}
                 {info && <p className="mt-1 text-xs text-slate-500">{info}</p>}

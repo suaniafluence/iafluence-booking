@@ -250,10 +250,9 @@ def test_retry_email_prepares_the_same_email_again(ended, admin, fakes):
     got = report()
     assert (got.status, got.delivery, got.with_summary, got.error) == ("drafted", "draft", True, None)
     assert got.drafted_at == END + timedelta(hours=2)
-    # Done: a second click does nothing.
-    r = admin.post(f"/api/consultant/reports/{ended}/retry-email")
-    assert (r.status_code, r.json()["detail"]) == (409, "Cet email n'a pas échoué : rien à recréer.")
-    assert len(fakes["mailer"].drafts) == 1
+    # A drafted email can be recreated again (lost draft): a new draft, never a send.
+    assert admin.post(f"/api/consultant/reports/{ended}/retry-email").status_code == 200
+    assert len(fakes["mailer"].drafts) == 2 and fakes["mailer"].sent == []
 
 
 def test_retry_email_fails_again(ended, admin, fakes):
@@ -295,11 +294,14 @@ def test_retry_email_on_a_refunded_purchase(ended, admin, fakes):
     assert report().status == "failed" and fakes["mailer"].drafts == []
 
 
-@pytest.mark.parametrize("values", [{"status": "waiting_transcript"}, {"status": "drafted", "delivery": "draft"}])
-def test_retry_email_only_after_a_gmail_failure(ended, admin, fakes, values):
+@pytest.mark.parametrize("values", [{"status": "waiting_transcript"}, {"status": "ready"}])
+def test_retry_email_only_once_the_email_was_prepared(ended, admin, fakes, values):
     set_report(**values)
     r = admin.post(f"/api/consultant/reports/{ended}/retry-email")
-    assert (r.status_code, r.json()["detail"]) == (409, "Cet email n'a pas échoué : rien à recréer.")
+    assert (r.status_code, r.json()["detail"]) == (
+        409,
+        "L'email de cette séance n'a pas encore été préparé : rien à recréer.",
+    )
     assert admin.post("/api/consultant/reports/999/retry-email").status_code == 404
     assert fakes["mailer"].drafts == []
 
